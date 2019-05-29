@@ -1,0 +1,58 @@
+﻿{
+    "environments": [
+        {
+            "TOOLCHAIN_FILE": "${env.VCPKG_ROOT}\\scripts\\buildsystems\\vcpkg.cmake",
+            "VCPKG_TRIPLET_X64": "x64-windows",
+            "BUILD_ROOT": "${projectDir}\\bin\\${name}",
+            "INSTALL_ROOT": "${projectDir}\\install\\${name}"
+        }
+    ],
+    "configurations": [
+        {
+            "name": "x64-Debug",
+            "generator": "Ninja",
+            "configurationType": "Debug",
+            "inheritEnvironments": [
+                "msvc_x64_x64"
+            ],
+            "buildRoot": "${env.BUILD_ROOT}",
+            "installRoot": "${env.INSTALL_ROOT}",
+            "cmakeCommandArgs": "",
+            "buildCommandArgs": "",
+            "ctestCommandArgs": "",
+            "variables": [
+                {
+                    "name": "CMAKE_TOOLCHAIN_FILE",
+                    "value": "${env.TOOLCHAIN_FILE}"
+                },
+                {
+                    "name": "VCPKG_TARGET_TRIPLET",
+                    "value": "${env.VCPKG_TRIPLET_X64}"
+                }
+            ]
+        },
+        {
+            "name": "x64-RelWithDebInfo",
+            "generator": "Ninja",
+            "configurationType": "RelWithDebInfo",
+            "inheritEnvironments": [
+                "msvc_x64_x64"
+            ],
+            "buildRoot": "${env.BUILD_ROOT}",
+            "installRoot": "${env.INSTALL_ROOT}",
+            "cmakeCommandArgs": "",
+            "buildCommandArgs": "",
+            "ctestCommandArgs": "",
+            "variables": [
+                {
+                    "name": "CMAKE_TOOLCHAIN_FILE",
+                    "value": "${env.TOOLCHAIN_FILE}"
+                },
+                {
+                    "name": "VCPKG_TARGET_TRIPLET",
+                    "value": "${env.VCPKG_TRIPLET_X64}"
+                }
+            ]
+        }
+    ]
+}
