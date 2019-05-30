@@ -11,9 +11,10 @@ namespace mpp
     {
     public:
         ~default_impl();
-        void on_create(program_state& state) final override;
+        void on_setup(program_state& state) final override;
+        void on_start(program_state& state) final override;
         void on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta) final override;
-        void on_destroy(program_state& state) final override;
+        void on_end(program_state& state) final override;
 
     private:
         std::uint32_t _vbo;

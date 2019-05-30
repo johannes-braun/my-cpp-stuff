@@ -44,8 +44,13 @@ namespace mpp
 
         void update(std::chrono::duration<double, std::milli> delta);
 
-        void set_position(glm::vec3 position);
+        void set_position(glm::vec3 position, bool smooth = false);
         void look_at(glm::vec3 dst, std::optional<glm::vec3> up = std::nullopt);
+        void look_at(glm::vec3 dst, bool smooth, std::optional<glm::vec3> up = std::nullopt);
+        void set_axis_smoothing(float smoothing);
+        void set_rotate_smoothing(float smoothing);
+        void set_axis_scaling(std::optional<float> scaling);
+        void set_rotate_scaling(std::optional<float> scaling);
         
         glm::vec3 dir_front() const;
         glm::vec3 dir_back() const;
@@ -54,6 +59,7 @@ namespace mpp
         glm::vec3 dir_up() const;
         glm::vec3 dir_down() const;
 
+        void input_speed_factor(float factor);
         void input_axis_x(float val);
         void input_axis_y(float val);
         void input_axis_z(float val);
@@ -63,9 +69,12 @@ namespace mpp
     private:
         glm::vec3 _input_axis{ 0, 0, 0 };
         glm::vec2 _input_rotate{ 0, 0 };
+        float _input_speed_factor{ 0.f };
+        float _axis_smoothing{ 0.5f };
+        float _rotate_smoothing{ 0.5f };
 
         std::optional<float> _axis_scaling = std::nullopt; // use delta time.
-        std::optional<float> _rotate_scaling = 0.001f;     // use fixed scaling.
+        std::optional<float> _rotate_scaling = 0.003f;     // use fixed scaling.
 
         glm::quat _rotation{ 1, 0, 0, 0 };
         glm::vec3 _position{ 0, 0, 0 };

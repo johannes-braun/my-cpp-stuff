@@ -1,7 +1,5 @@
 #include "default_impl.hpp"
-#define GLFW_INCLUDE_NONE
-#include <opengl/mygl.hpp>
-#include <GLFW/glfw3.h>
+#include <opengl/mygl_glfw.hpp>
 #include <program_state.hpp>
 #include <iostream>
 #include <glm/ext.hpp>
@@ -9,7 +7,11 @@
 namespace mpp
 {
     default_impl::~default_impl() {}
-    void default_impl::on_create(program_state& state) {
+    void default_impl::on_setup(program_state& state)
+    {
+        glfwWindowHint(GLFW_SAMPLES, 8);
+    }
+    void default_impl::on_start(program_state& state) {
         _clear_color = glm::vec3(rand() / float(RAND_MAX), rand() / float(RAND_MAX), rand() / float(RAND_MAX));
         glClearColor(_clear_color.x, _clear_color.y, _clear_color.z, 1.f);
 
@@ -91,8 +93,8 @@ void main()
         glDeleteShader(vs);
         glDeleteShader(fs);
 
-        _camera.set_position(glm::vec3(0, 0, 3));
-        //_camera.look_at(glm::vec3(0, 0, 0));
+        _camera.set_position(glm::vec3(3, 3, 3));
+        _camera.look_at(glm::vec3(0, 0, 0));
     }
     void default_impl::on_update(program_state & state, std::chrono::steady_clock::time_point::duration delta) {
 
@@ -106,6 +108,12 @@ void main()
             _camera.input_axis_x(glfwGetKey(gcc, GLFW_KEY_D) - glfwGetKey(gcc, GLFW_KEY_A));
             _camera.input_axis_y(glfwGetKey(gcc, GLFW_KEY_E) - glfwGetKey(gcc, GLFW_KEY_Q));
             _camera.input_axis_z(glfwGetKey(gcc, GLFW_KEY_W) - glfwGetKey(gcc, GLFW_KEY_S));
+            if (glfwGetKey(gcc, GLFW_KEY_LEFT_CONTROL))
+                _camera.input_speed_factor(0.6f);
+            else if(glfwGetKey(gcc, GLFW_KEY_LEFT_SHIFT))
+                _camera.input_speed_factor(9.f);
+            else
+                _camera.input_speed_factor(3.f);
         }
 
         if (!ImGui::GetIO().WantCaptureMouse && glfwGetMouseButton(gcc, GLFW_MOUSE_BUTTON_LEFT))
@@ -145,7 +153,7 @@ void main()
             ImGui::End();
         }
     }
-    void default_impl::on_destroy(program_state & state) {
+    void default_impl::on_end(program_state & state) {
 
     }
 }

@@ -49,7 +49,8 @@ namespace mpp
             ++_num_windows;
             std::lock_guard lock(_state_mutex);
 
-            glfwWindowHint(GLFW_SAMPLES, 8);
+            glfwDefaultWindowHints();
+            state->on_setup(*this);
             glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
             _state_threads.emplace(state, std::thread([=] {
                 struct window_destructor
@@ -88,7 +89,7 @@ namespace mpp
                 glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM, 0, nullptr, GL_FALSE);
                 glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0, nullptr, GL_TRUE);
 
-                state->on_create(*this);
+                state->on_start(*this);
                 time_point last_checkmark = std::chrono::steady_clock::now();
                 while (!glfwWindowShouldClose(window.get()))
                 {
@@ -106,7 +107,7 @@ namespace mpp
                     glfwSwapBuffers(window.get());
                     glfwPollEvents();
                 }
-                state->on_destroy(*this);
+                state->on_end(*this);
                 --_num_windows;
                 std::lock_guard lock(_state_mutex);
                 _to_remove.emplace_back(state);
