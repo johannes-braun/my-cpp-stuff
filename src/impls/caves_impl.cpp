@@ -82,7 +82,7 @@ void main()
         constexpr auto meshcs_src = R"(#version 460 core
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 layout(r8ui, binding = 0) uniform readonly uimage3D texture_front;
-layout(binding = 0) restrict writeonly buffer VBO
+layout(binding = 0) writeonly buffer VBO
 {
     vec4 vbo[];
 };
@@ -91,7 +91,7 @@ void main()
     const ivec3 tsize = ivec3(64);
     ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
     const uint c = imageLoad(texture_front, gid).r;
-    if(c == 1)
+    if(c != 0)
         vbo[gid.z * tsize.y * tsize.x + gid.y * tsize.x + gid.x] = vec4(vec3(gid), 1);
     else
         vbo[gid.z * tsize.y * tsize.x + gid.y * tsize.x + gid.x] = vec4(0.f, 0.f, 0.f, 1);
@@ -100,7 +100,7 @@ void main()
         glShaderSource(meshcs, 1, &meshcs_src, nullptr);
         glCompileShader(meshcs);
 
-        
+
         _sim_program = glCreateProgram();
         glAttachShader(_sim_program, simcs);
         glLinkProgram(_sim_program);
@@ -193,7 +193,7 @@ void main()
         _camera.set_position(glm::vec3(3, 3, 3));
         _camera.look_at(glm::vec3(0, 0, 0));
     }
-    void caves_impl::on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta) {
+    void caves_impl::on_update(program_state & state, std::chrono::steady_clock::time_point::duration delta) {
         _acc_time += delta;
         const auto delta_millis = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(delta);
         const auto gcc = glfwGetCurrentContext();
@@ -232,18 +232,18 @@ void main()
         {
             glUseProgram(_sim_program);
             glUniform2f(0, _min_cutoff, _max_cutoff);
-            glBindImageTexture(0, _texture_front, 0, false, 0, GL_READ_ONLY, GL_R8UI);
-            glBindImageTexture(1, _texture_back, 0, false, 0, GL_WRITE_ONLY, GL_R8UI);
+            glBindImageTexture(0, _texture_front, 0, true, 0, GL_READ_ONLY, GL_R8UI);
+            glBindImageTexture(1, _texture_back, 0, true, 0, GL_WRITE_ONLY, GL_R8UI);
             glDispatchCompute(64 / 8, 64 / 8, 64 / 8);
             glCopyImageSubData(_texture_back, GL_TEXTURE_3D, 0, 0, 0, 0, _texture_front, GL_TEXTURE_3D, 0, 0, 0, 0, _texture_size.x, _texture_size.y, _texture_size.z);
 
-            glUseProgram(_mesh_program);
-            glBindImageTexture(0, _texture_front, 0, false, 0, GL_READ_ONLY, GL_R8UI);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, _vbo);
-            glDispatchCompute(64 / 8, 64 / 8, 64 / 8);
             _acc_time = { 0 };
         }
 
+        glUseProgram(_mesh_program);
+        glBindImageTexture(0, _texture_front, 0, true, 0, GL_READ_ONLY, GL_R8UI);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, _vbo);
+        glDispatchCompute(64 / 8, 64 / 8, 64 / 8);
         glEnable(GL_DEPTH_TEST);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         int viewport[4];
