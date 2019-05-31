@@ -13,7 +13,7 @@ namespace mpp
         glfwWindowHint(GLFW_SAMPLES, 8);
     }
     void caves_impl::on_start(program_state& state) {
-        _texture_size = { 128, 128, 128 };
+        _texture_size = { 64, 64, 64 };
 
         glCreateTextures(GL_TEXTURE_3D, 1, &_texture_front);
         glCreateTextures(GL_TEXTURE_3D, 1, &_texture_back);
@@ -34,7 +34,7 @@ layout(r8ui, binding = 1) uniform writeonly uimage3D texture_back;
 layout(location = 0) uniform vec2 cutoffs;
 void main()
 {
-    const ivec3 tsize = ivec3(128, 128, 128);
+    const ivec3 tsize = ivec3(64);
     const ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
     uint c = imageLoad(texture_front, gid.xyz).x;
     uint neighs[26];
@@ -88,7 +88,7 @@ layout(binding = 0) restrict writeonly buffer VBO
 };
 void main()
 {
-    const ivec3 tsize = ivec3(128, 128, 128);
+    const ivec3 tsize = ivec3(64);
     ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
     const uint c = imageLoad(texture_front, gid).r;
     if(c == 1)
@@ -129,7 +129,7 @@ layout(location = 0) out vec3 vs_pos;
 void main() {
     gl_Position = view_proj * vec4(0.025f * in_pos.xyz, 1);
     gl_PointSize = base_point_size / gl_Position.w;
-    vs_pos = 0.01f * in_pos.xyz;
+    vs_pos = 0.01f * in_pos.xyz / (1.f+gl_Position.w / 3.f);
 }
 )";
         glShaderSource(vs, 1, &vs_src, nullptr);
@@ -234,13 +234,13 @@ void main()
             glUniform2f(0, _min_cutoff, _max_cutoff);
             glBindImageTexture(0, _texture_front, 0, false, 0, GL_READ_ONLY, GL_R8UI);
             glBindImageTexture(1, _texture_back, 0, false, 0, GL_WRITE_ONLY, GL_R8UI);
-            glDispatchCompute(128 / 8, 128 / 8, 128 / 8);
+            glDispatchCompute(64 / 8, 64 / 8, 64 / 8);
             glCopyImageSubData(_texture_back, GL_TEXTURE_3D, 0, 0, 0, 0, _texture_front, GL_TEXTURE_3D, 0, 0, 0, 0, _texture_size.x, _texture_size.y, _texture_size.z);
 
             glUseProgram(_mesh_program);
             glBindImageTexture(0, _texture_front, 0, false, 0, GL_READ_ONLY, GL_R8UI);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, _vbo);
-            glDispatchCompute(128 / 8, 128 / 8, 128 / 8);
+            glDispatchCompute(64 / 8, 64 / 8, 64 / 8);
             _acc_time = { 0 };
         }
 
