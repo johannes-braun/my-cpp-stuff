@@ -3,7 +3,10 @@
 #include <imgui/imgui.h>
 #include <program_state.hpp>
 #include <opengl/mygl_glfw.hpp>
+
+#include <impls/automaton_impl.hpp>
 #include <impls/default_impl.hpp>
+#include <impls/caves_impl.hpp>
 
 namespace mpp
 {
@@ -37,6 +40,8 @@ namespace mpp
         if (ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDecoration))
         {
             mk_button<default_impl>(state, "Default Impl");
+            mk_button<automaton_impl>(state, "Automaton Impl");
+            mk_button<caves_impl>(state, "Caves Impl");
 
             ImGui::End();
         }

@@ -93,6 +93,8 @@ void main()
         glDeleteShader(vs);
         glDeleteShader(fs);
 
+        _camera.set_axis_smoothing(0.7f);
+        _camera.set_rotate_smoothing(0.7f);
         _camera.set_position(glm::vec3(3, 3, 3));
         _camera.look_at(glm::vec3(0, 0, 0));
     }
