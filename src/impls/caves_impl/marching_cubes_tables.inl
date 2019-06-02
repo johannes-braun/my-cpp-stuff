@@ -35,7 +35,50 @@ namespace mpp::detail
         3,   2,   4,   1,   2,   1,   1,   0
     };
 
-    using edge_set_t = std::array<glm::ivec4, 5>;
+    struct compressed_edge_set
+    {
+        constexpr compressed_edge_set(glm::ivec4 a, glm::ivec4 b, glm::ivec4 c, glm::ivec4 d, glm::ivec4 e)
+            : compressed_set{ voxel_edge_to_vertices(a[0]) |
+                (voxel_edge_to_vertices(a[1]) << 6) |
+                (voxel_edge_to_vertices(a[2]) << 12),
+                voxel_edge_to_vertices(b[0]) |
+                (voxel_edge_to_vertices(b[1]) << 6) |
+                (voxel_edge_to_vertices(b[2]) << 12),
+                voxel_edge_to_vertices(c[0]) |
+                (voxel_edge_to_vertices(c[1]) << 6) |
+                (voxel_edge_to_vertices(c[2]) << 12),
+                voxel_edge_to_vertices(d[0]) |
+                (voxel_edge_to_vertices(d[1]) << 6) |
+                (voxel_edge_to_vertices(d[2]) << 12),
+                voxel_edge_to_vertices(e[0]) |
+                (voxel_edge_to_vertices(e[1]) << 6) |
+                (voxel_edge_to_vertices(e[2]) << 12) }
+        {
+        }
+
+        constexpr std::int32_t voxel_edge_to_vertices(std::int32_t edge) {
+            switch (edge) {
+            case  0: return 0x0 | 0x1 << 3;
+            case  1: return 0x1 | 0x2 << 3;
+            case  2: return 0x2 | 0x3 << 3;
+            case  3: return 0x0 | 0x3 << 3;
+            case  4: return 0x4 | 0x5 << 3;
+            case  5: return 0x5 | 0x6 << 3;
+            case  6: return 0x6 | 0x7 << 3;
+            case  7: return 0x4 | 0x7 << 3;
+            case  8: return 0x0 | 0x4 << 3;
+            case  9: return 0x1 | 0x5 << 3;
+            case 10: return 0x2 | 0x6 << 3;
+            case 11: return 0x3 | 0x7 << 3;
+            default: return 0;
+            }
+        }
+
+        std::int32_t compressed_set[5];
+    };
+
+    using edge_set_t = compressed_edge_set;
+
     constexpr std::array<edge_set_t, 256> edge_connections{
         edge_set_t{  glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1)},
         edge_set_t{	 glm::ivec4(0,  8,  3, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1), glm::ivec4(-1, -1, -1, -1)},

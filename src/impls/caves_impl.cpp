@@ -43,30 +43,12 @@ layout(points) in;
 layout(triangle_strip, max_vertices = 15) out;
 layout(binding = 0) restrict readonly buffer CaseFaces { int case_faces[256]; };
 
-struct edge_set_t { ivec4 connections[5]; };
+struct edge_set_t { uint connections[5]; };
 layout(binding = 1) restrict readonly buffer EdgeConnections { edge_set_t edge_connections[256]; };
 layout(r8ui, binding = 0) restrict readonly uniform uimage3D point_image;
 layout(location = 0) uniform mat4 view_projection;
 layout(location = 0) out vec4 gs_pos;
 layout(location = 1) out vec3 gs_normal;
-
-uint voxel_edge_to_vertices(uint edge) {
-    switch(edge) {
-        case  0: return 0x0 | 0x1<<3;
-        case  1: return 0x1 | 0x2<<3;
-        case  2: return 0x2 | 0x3<<3;
-        case  3: return 0x0 | 0x3<<3;
-        case  4: return 0x4 | 0x5<<3;
-        case  5: return 0x5 | 0x6<<3;
-        case  6: return 0x6 | 0x7<<3;
-        case  7: return 0x4 | 0x7<<3;
-        case  8: return 0x0 | 0x4<<3;
-        case  9: return 0x1 | 0x5<<3;
-        case 10: return 0x2 | 0x6<<3;
-        case 11: return 0x3 | 0x7<<3;
-        default: return 0;
-    }
-}
 
 void main()
 {
@@ -106,24 +88,21 @@ void main()
     const edge_set_t edges = edge_connections[mc_case];
     for(int i=0; i<poly_count; ++i)
     {
-        const ivec4 indices = edges.connections[i];
+        const uint indices = edges.connections[i];
         vec3 vertices[3];
         {
-            const uint edge_vertices = voxel_edge_to_vertices(indices[0]);
-            const uint first = edge_vertices & 0x7;
-            const uint second = (edge_vertices >> 3) & 0x7;
+            const uint first = indices & 0x7;
+            const uint second = (indices >> 3) & 0x7;
             vertices[0] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
         }
         {
-            const uint edge_vertices = voxel_edge_to_vertices(indices[1]);
-            const uint first = edge_vertices & 0x7;
-            const uint second = (edge_vertices >> 3) & 0x7;
+            const uint first = (indices >> 6) & 0x7;
+            const uint second = (indices >> 9) & 0x7;
             vertices[1] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
         }
         {
-            const uint edge_vertices = voxel_edge_to_vertices(indices[2]);
-            const uint first = edge_vertices & 0x7;
-            const uint second = (edge_vertices >> 3) & 0x7;
+            const uint first = (indices >> 12) & 0x7;
+            const uint second = (indices >> 15) & 0x7;
             vertices[2] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
         }
 
