@@ -24,6 +24,14 @@ namespace mpp
             int value;
         };
 
+        // Marching cubes
+        std::uint32_t _mc_buf_case_faces;
+        std::uint32_t _mc_buf_edge_connections;
+        std::uint32_t _mc_program;
+        std::uint32_t _mc_vao;
+        void init_mc();
+
+        // Rest
         glm::ivec3 _texture_size;
         std::uint32_t _texture_front;
         std::uint32_t _texture_back;

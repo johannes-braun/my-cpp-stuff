@@ -4,6 +4,7 @@
 #include <iostream>
 #include <glm/ext.hpp>
 #include <random>
+#include <impls/caves_impl/marching_cubes.hpp>
 
 namespace mpp
 {
@@ -12,8 +13,173 @@ namespace mpp
     {
         glfwWindowHint(GLFW_SAMPLES, 8);
     }
+    void caves_impl::init_mc()
+    {
+        glCreateBuffers(1, &_mc_buf_case_faces);
+        glNamedBufferStorage(_mc_buf_case_faces, std::size(case_faces) * sizeof(case_faces[0]), std::data(case_faces), {});
+
+        glCreateBuffers(1, &_mc_buf_edge_connections);
+        glNamedBufferStorage(_mc_buf_edge_connections, std::size(edge_connections) * sizeof(edge_connections[0]), std::data(edge_connections), {});
+
+        _mc_program = glCreateProgram();
+
+        const auto mc_vs = glCreateShader(GL_VERTEX_SHADER);
+        const auto mc_gs = glCreateShader(GL_GEOMETRY_SHADER);
+        const auto mc_fs = glCreateShader(GL_FRAGMENT_SHADER);
+
+        constexpr auto mc_vs_src = R"(#version 460 core
+void main() { 
+const ivec3 tex_size = ivec3(64, 64, 64);
+const uint vid = uint(gl_VertexID);
+const uint id_z = vid / (tex_size.x * tex_size.y);
+const uint id_xy = vid % (tex_size.x * tex_size.y);
+const uint id_y = id_xy / tex_size.x;
+const uint id_x = id_xy % tex_size.x;
+gl_Position = vec4(id_x, id_y, id_z, 1); 
+}
+)";
+        constexpr auto mc_gs_src = R"(#version 460 core
+layout(points) in;
+layout(triangle_strip, max_vertices = 15) out;
+layout(binding = 0) restrict readonly buffer CaseFaces { int case_faces[256]; };
+
+struct edge_set_t { ivec4 connections[5]; };
+layout(binding = 1) restrict readonly buffer EdgeConnections { edge_set_t edge_connections[256]; };
+layout(r8ui, binding = 0) restrict readonly uniform uimage3D point_image;
+layout(location = 0) uniform mat4 view_projection;
+layout(location = 0) out vec4 gs_pos;
+layout(location = 1) out vec3 gs_normal;
+
+uint voxel_edge_to_vertices(uint edge) {
+    switch(edge) {
+        case  0: return 0x0 | 0x1<<3;
+        case  1: return 0x1 | 0x2<<3;
+        case  2: return 0x2 | 0x3<<3;
+        case  3: return 0x0 | 0x3<<3;
+        case  4: return 0x4 | 0x5<<3;
+        case  5: return 0x5 | 0x6<<3;
+        case  6: return 0x6 | 0x7<<3;
+        case  7: return 0x4 | 0x7<<3;
+        case  8: return 0x0 | 0x4<<3;
+        case  9: return 0x1 | 0x5<<3;
+        case 10: return 0x2 | 0x6<<3;
+        case 11: return 0x3 | 0x7<<3;
+        default: return 0;
+    }
+}
+
+void main()
+{
+    const float scaling = 1.f/16.f;
+    const vec4 base_pos = gl_in[0].gl_Position;
+    const ivec3 gid = ivec3(base_pos.xyz);
+
+	vec3 voxel_vertices[8];
+	voxel_vertices[0] = vec3(1, 0, 0);
+	voxel_vertices[1] = vec3(1, 0, 1);
+	voxel_vertices[2] = vec3(1, 1, 1);
+	voxel_vertices[3] = vec3(1, 1, 0);
+	voxel_vertices[4] = vec3(0, 0, 0);
+	voxel_vertices[5] = vec3(0, 0, 1);
+	voxel_vertices[6] = vec3(0, 1, 1);
+	voxel_vertices[7] = vec3(0, 1, 0);
+
+    const uint a = imageLoad(point_image, ivec3(gid.x+1, gid.y, gid.z)).r;
+    const uint b = imageLoad(point_image, ivec3(gid.x+1, gid.y, gid.z+1)).r;
+    const uint c = imageLoad(point_image, ivec3(gid.x+1, gid.y+1, gid.z+1)).r;
+    const uint d = imageLoad(point_image, ivec3(gid.x+1, gid.y+1, gid.z)).r;
+    const uint e = imageLoad(point_image, ivec3(gid.x, gid.y, gid.z)).r;
+    const uint f = imageLoad(point_image, ivec3(gid.x, gid.y, gid.z+1)).r;
+    const uint g = imageLoad(point_image, ivec3(gid.x, gid.y+1, gid.z+1)).r;
+    const uint h = imageLoad(point_image, ivec3(gid.x, gid.y+1, gid.z)).r;
+
+    const uint mc_case = ((a&1)<<0) | 
+        ((b&1) << 1) |
+        ((c&1) << 2) |
+        ((d&1) << 3) |
+        ((e&1) << 4) |
+        ((f&1) << 5) |
+        ((g&1) << 6) |
+        ((h&1) << 7);
+
+    const int poly_count = case_faces[mc_case];
+    const edge_set_t edges = edge_connections[mc_case];
+    for(int i=0; i<poly_count; ++i)
+    {
+        const ivec4 indices = edges.connections[i];
+        vec3 vertices[3];
+        {
+            const uint edge_vertices = voxel_edge_to_vertices(indices[0]);
+            const uint first = edge_vertices & 0x7;
+            const uint second = (edge_vertices >> 3) & 0x7;
+            vertices[0] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
+        }
+        {
+            const uint edge_vertices = voxel_edge_to_vertices(indices[1]);
+            const uint first = edge_vertices & 0x7;
+            const uint second = (edge_vertices >> 3) & 0x7;
+            vertices[1] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
+        }
+        {
+            const uint edge_vertices = voxel_edge_to_vertices(indices[2]);
+            const uint first = edge_vertices & 0x7;
+            const uint second = (edge_vertices >> 3) & 0x7;
+            vertices[2] = mix(voxel_vertices[first], voxel_vertices[second], 0.5);
+        }
+
+        gs_normal = normalize(cross(normalize(vertices[1] - vertices[0]), normalize(vertices[2] - vertices[0])));
+        gs_pos = vec4(scaling * (base_pos.xyz + vertices[0]), 1);
+        gl_Position = view_projection * gs_pos;
+        EmitVertex();
+        gs_pos = vec4(scaling * (base_pos.xyz + vertices[1]), 1);
+        gl_Position = view_projection * gs_pos;
+        EmitVertex();
+        gs_pos = vec4(scaling * (base_pos.xyz + vertices[2]), 1);
+        gl_Position = view_projection * gs_pos;
+        EmitVertex();
+        EndPrimitive();
+    }
+}
+)";
+        constexpr auto mc_fs_src = R"(#version 460 core
+layout(location = 0) in vec4 gs_pos;
+layout(location = 1) in vec3 gs_normal;
+layout(location = 0) out vec4 fs_color;
+void main()
+{
+    const vec3 ldir = normalize(vec3(1, 1, 1));
+
+    fs_color = vec4((gs_pos.rgb) * max(dot(gl_FrontFacing ? gs_normal : -gs_normal, ldir), 0.1f), 1) ;
+}
+)";
+        glShaderSource(mc_vs, 1, &mc_vs_src, nullptr);
+        glShaderSource(mc_gs, 1, &mc_gs_src, nullptr);
+        glShaderSource(mc_fs, 1, &mc_fs_src, nullptr);
+        glCompileShader(mc_vs);
+        glCompileShader(mc_gs);
+        glCompileShader(mc_fs);
+
+        glAttachShader(_mc_program, mc_vs);
+        glAttachShader(_mc_program, mc_gs);
+        glAttachShader(_mc_program, mc_fs);
+        glLinkProgram(_mc_program);
+
+        int did_compile;
+        int info_log_length;
+        std::string info_log;
+        glGetProgramiv(_mc_program, GL_LINK_STATUS, &did_compile);
+        glGetProgramiv(_mc_program, GL_INFO_LOG_LENGTH, &info_log_length);
+        info_log.resize(info_log_length, '\0');
+        glGetProgramInfoLog(_mc_program, info_log_length, &info_log_length, info_log.data());
+        std::cout << "MC Program Link Status:\n";
+        std::cout << info_log << '\n';
+
+        glCreateVertexArrays(1, &_mc_vao);
+    }
+
     void caves_impl::on_start(program_state& state) {
         _texture_size = { 64, 64, 64 };
+        init_mc();
 
         glCreateTextures(GL_TEXTURE_3D, 1, &_texture_front);
         glCreateTextures(GL_TEXTURE_3D, 1, &_texture_back);
@@ -34,9 +200,16 @@ layout(r8ui, binding = 1) uniform writeonly uimage3D texture_back;
 layout(location = 0) uniform vec2 cutoffs;
 void main()
 {
-    const ivec3 tsize = ivec3(64);
+    const ivec3 tsize = ivec3(64, 64, 64);
     const ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
     uint c = imageLoad(texture_front, gid.xyz).x;
+
+    if(gid.x == 0 || gid.y == 0 || gid.z == 0 || gid.x == tsize.x-1 || gid.y == tsize.y-1 || gid.z == tsize.z-1)
+    {
+        imageStore(texture_back, gid.xyz, uvec4(0));
+        return;
+    }
+
     uint neighs[26];
     int neigh = 0;
     for (int nx = -1; nx <= 1; ++nx)
@@ -45,7 +218,7 @@ void main()
         {
             for (int nz = -1; nz <= 1; ++nz)
             {
-                if ((nx != 0 || ny != 0 || nz != 0) && gid.x + nx >= 0 && gid.x + nx < tsize.x && gid.y + ny >= 0 && gid.y + ny < tsize.y && gid.z + nz >= 0 && gid.z + nz < tsize.z)
+                if ((nx != 0 || ny != 0 || nz != 0) && gid.x + nx > 0 && gid.x + nx < tsize.x-1 && gid.y + ny > 0 && gid.y + ny < tsize.y-1 && gid.z + nz > 0 && gid.z + nz < tsize.z-1)
                 {
                     neighs[neigh++] = imageLoad(texture_front, gid.xyz + ivec3(nx, ny, nz)).x;
                 }
@@ -252,12 +425,25 @@ void main()
         const glm::mat4 view_proj =
             glm::perspectiveFov(glm::radians(60.f), float(viewport[2]), float(viewport[3]), 0.01f, 100.f) *
             _camera.view_matrix();
-        glUseProgram(_draw_program);
+       /* glUseProgram(_draw_program);
         glProgramUniformMatrix4fv(_draw_program, 0, 1, false, value_ptr(view_proj));
         glProgramUniform1f(_draw_program, 1, _base_point_size);
         glBindVertexArray(_vao);
         glBindVertexBuffer(0, _vbo, 0, sizeof(glm::vec4));
-        glDrawArrays(GL_POINTS, 0, _texture_size.x * _texture_size.y * _texture_size.z);
+        glDrawArrays(GL_POINTS, 0, _texture_size.x * _texture_size.y * _texture_size.z);*/
+
+
+        //layout(binding = 0) restrict readonly buffer CaseFaces { int case_faces[256]; };
+        //struct edge_set_t { ivec4 connections[5]; };
+        //layout(binding = 1) restrict readonly buffer EdgeConnections { edge_set_t edge_connections[256]; };
+        //layout(r8ui, binding = 0) restrict readonly uimage2D point_image;
+        //layout(location = 0) uniform mat4 view_projection;
+        glUseProgram(_mc_program);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, _mc_buf_case_faces);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, _mc_buf_edge_connections);
+        glBindImageTexture(0, _texture_front, 0, true, 0, GL_READ_ONLY, GL_R8UI);
+        glUniformMatrix4fv(0, 1, false, value_ptr(view_proj));
+        glDrawArrays(GL_POINTS, 0, (_texture_size.x-1) * (_texture_size.y - 1) * (_texture_size.z - 1));
 
         if (ImGui::Begin("Settings"))
         {
