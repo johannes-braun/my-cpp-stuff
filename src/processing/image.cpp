@@ -1,5 +1,6 @@
 #include <processing/image.hpp>
 #include <nothings/stb_image.h>
+#include <nothings/stb_image_write.h>
 
 namespace mpp
 {
@@ -30,6 +31,7 @@ namespace mpp
 
     void image::load_stream(std::istream& stream, std::optional<std::int32_t> desired_components)
     {
+        assert(stream.good());
         stbi_io_callbacks callbacks;
         callbacks.read = [](void* user, char* data, int size) -> int {
             std::istream& stream = *static_cast<std::istream*>(user);
@@ -47,6 +49,34 @@ namespace mpp
         _components = desired_components ? *desired_components : _components;
         _data.resize(size_t(_width) * _height * _components);
         _data.assign(data, data + _data.size());
+    }
+    void image::save_stream(std::ostream& stream, file_format fmt)
+    {
+        assert(stream.good());
+        stbi_write_func* func = [](void* context, void* data, int size) {
+            std::ostream& out = *static_cast<std::ostream*>(context);
+            out.write(static_cast<const char*>(data), size);
+        };
+        switch (fmt)
+        {
+        case file_format::png:
+            stbi_write_png_to_func(func, &stream, _width, _height, _components, _data.data(), 0);
+            break;
+        case file_format::jpg:
+            stbi_write_jpg_to_func(func, &stream, _width, _height, _components, _data.data(), 95);
+            break;
+        case file_format::bmp:
+            stbi_write_bmp_to_func(func, &stream, _width, _height, _components, _data.data());
+            break;
+        }
+    }
+    void image::load_stream(std::istream&& stream, std::optional<std::int32_t> desired_components)
+    {
+        load_stream(stream, desired_components);
+    }
+    void image::save_stream(std::ostream&& stream, file_format fmt)
+    {
+        save_stream(stream, fmt);
     }
     glm::ivec2 image::dimensions() const noexcept
     {
