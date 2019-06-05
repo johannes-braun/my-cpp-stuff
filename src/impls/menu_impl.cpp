@@ -7,6 +7,7 @@
 #include <impls/automaton_impl.hpp>
 #include <impls/default_impl.hpp>
 #include <impls/caves_impl.hpp>
+#include <impls/gl43_impl.hpp>
 
 namespace mpp
 {
@@ -27,7 +28,7 @@ namespace mpp
         }
     }
 
-    void menu_impl::on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta)
+    void menu_impl::on_update(program_state& state, seconds delta)
     {
         int win_width = 300;
         int win_height = 400;
@@ -42,6 +43,7 @@ namespace mpp
             mk_button<default_impl>(state, "Default Impl");
             mk_button<automaton_impl>(state, "Automaton Impl");
             mk_button<caves_impl>(state, "Caves Impl");
+            mk_button<gl43_impl>(state, "OpenGL 4.3 Impl");
 
             ImGui::End();
         }

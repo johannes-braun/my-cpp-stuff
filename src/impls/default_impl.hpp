@@ -1,19 +1,19 @@
 #pragma once
 
 #include <imgui/imgui.h>
-#include <impl.hpp>
+#include <visualization.hpp>
 #include <glm/glm.hpp>
 #include <camera.hpp>
 
 namespace mpp
 {
-    class default_impl : public impl
+    class default_impl : public basic_visualization
     {
     public:
         ~default_impl();
         void on_setup(program_state& state) final override;
         void on_start(program_state& state) final override;
-        void on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta) final override;
+        void on_update(program_state& state, seconds delta) final override;
         void on_end(program_state& state) final override;
 
     private:

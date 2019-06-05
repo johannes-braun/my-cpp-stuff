@@ -345,7 +345,7 @@ void main()
         _camera.set_position(glm::vec3(3, 3, 3));
         _camera.look_at(glm::vec3(0, 0, 0));
     }
-    void caves_impl::on_update(program_state & state, std::chrono::steady_clock::time_point::duration delta) {
+    void caves_impl::on_update(program_state & state, seconds delta) {
         _acc_time += delta;
         const auto delta_millis = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(delta);
         const auto gcc = glfwGetCurrentContext();
@@ -355,9 +355,9 @@ void main()
 
         if (!ImGui::GetIO().WantCaptureKeyboard && !ImGui::GetIO().WantTextInput)
         {
-            _camera.input_axis_x(glfwGetKey(gcc, GLFW_KEY_D) - glfwGetKey(gcc, GLFW_KEY_A));
-            _camera.input_axis_y(glfwGetKey(gcc, GLFW_KEY_E) - glfwGetKey(gcc, GLFW_KEY_Q));
-            _camera.input_axis_z(glfwGetKey(gcc, GLFW_KEY_W) - glfwGetKey(gcc, GLFW_KEY_S));
+            _camera.input_axis_x(float(glfwGetKey(gcc, GLFW_KEY_D) - glfwGetKey(gcc, GLFW_KEY_A)));
+            _camera.input_axis_y(float(glfwGetKey(gcc, GLFW_KEY_E) - glfwGetKey(gcc, GLFW_KEY_Q)));
+            _camera.input_axis_z(float(glfwGetKey(gcc, GLFW_KEY_W) - glfwGetKey(gcc, GLFW_KEY_S)));
             if (glfwGetKey(gcc, GLFW_KEY_LEFT_CONTROL))
                 _camera.input_speed_factor(0.6f);
             else if (glfwGetKey(gcc, GLFW_KEY_LEFT_SHIFT))
@@ -368,8 +368,8 @@ void main()
 
         if (!ImGui::GetIO().WantCaptureMouse && glfwGetMouseButton(gcc, GLFW_MOUSE_BUTTON_LEFT))
         {
-            _camera.input_rotate_h(cposx - _last_curpos.x);
-            _camera.input_rotate_v(cposy - _last_curpos.y);
+            _camera.input_rotate_h(float(cposx - _last_curpos.x));
+            _camera.input_rotate_v(float(cposy - _last_curpos.y));
 
             glfwSetInputMode(glfwGetCurrentContext(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }

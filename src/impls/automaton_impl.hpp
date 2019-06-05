@@ -1,20 +1,20 @@
 #pragma once
 
 #include <imgui/imgui.h>
-#include <impl.hpp>
+#include <visualization.hpp>
 #include <glm/glm.hpp>
 #include <camera.hpp>
 #include <vector>
 
 namespace mpp
 {
-    class automaton_impl : public impl
+    class automaton_impl : public basic_visualization
     {
     public:
         ~automaton_impl();
         void on_setup(program_state& state) final override;
         void on_start(program_state& state) final override;
-        void on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta) final override;
+        void on_update(program_state& state, seconds delta) final override;
         void on_end(program_state& state) final override;
 
     private:
@@ -31,6 +31,6 @@ namespace mpp
         std::vector<glm::vec4> _tex_data;
         bool _running = false;
         int _radius = 3;
-        std::chrono::steady_clock::time_point::duration _acc_time;
+        seconds _acc_time;
     };
 }

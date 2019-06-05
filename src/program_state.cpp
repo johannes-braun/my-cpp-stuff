@@ -37,7 +37,7 @@ namespace mpp
         }
     }
 
-    void program_state::open_state(std::shared_ptr<mpp::impl> state)
+    void program_state::open_state(std::shared_ptr<mpp::basic_visualization> state)
     {
         static struct glfw_init_t
         {

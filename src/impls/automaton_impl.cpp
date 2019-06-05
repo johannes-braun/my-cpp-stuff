@@ -31,7 +31,7 @@ namespace mpp
         glNamedFramebufferTexture(_fbo, GL_COLOR_ATTACHMENT0, _texture, 0);
         glTextureSubImage2D(_texture, 0, 0, 0, _texture_size.x, _texture_size.y, GL_RGBA, GL_FLOAT, _tex_data.data());
     }
-    void automaton_impl::on_update(program_state& state, std::chrono::steady_clock::time_point::duration delta) {
+    void automaton_impl::on_update(program_state& state, seconds delta) {
         _acc_time += delta;
         int w, h;
         glfwGetFramebufferSize(glfwGetCurrentContext(), &w, &h);
