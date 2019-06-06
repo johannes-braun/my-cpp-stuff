@@ -1,5 +1,6 @@
 #include <impls/gl43_impl.hpp>
 #include <processing/sift/sift.hpp>
+#include <processing/image.hpp>
 #include <fstream>
 #include <string>
 
@@ -14,7 +15,7 @@ namespace mpp
         {
             std::ifstream file("../../res/IMG_20190605_174704.jpg", std::ios::binary | std::ios::in);
             img.load_stream(file, 1);
-            std::vector<image> dog = sift::difference_of_gaussian(img, 3, 5);
+            std::vector<image> dog = sift::sift(img, 4, 3);
 
             int i = 0;
             for (auto& img : dog)
@@ -26,7 +27,7 @@ namespace mpp
         {
             std::ifstream file("../../res/IMG_20190605_174705.jpg", std::ios::binary | std::ios::in);
             img.load_stream(file, 1);
-            std::vector<image> dog = sift::difference_of_gaussian(img, 3, 5);
+            std::vector<image> dog = sift::sift(img, 4, 3);
 
             int i = 0;
             for (auto& img : dog)
