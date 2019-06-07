@@ -171,7 +171,7 @@ namespace mpp::sift {
         }
     }
 
-    std::vector<image> sift(const image& img, size_t octaves, size_t feature_scales)
+    std::vector<feature> sift(const image& img, size_t octaves, size_t feature_scales)
     {
         // Before starting, capture the OpenGL state for a seamless interaction
         opengl_state_capture capture_state;
@@ -213,23 +213,16 @@ namespace mpp::sift {
         plog.next("Filter Features");
 
         // Download texture data for further processing on the CPU
-        struct feature
-        {
-            float x;
-            float y;
-            float sigma;
-            float scale;
-        };
+        
         std::vector<std::vector<feature>> feature_points(octaves);
+        std::vector<feature> all_feature_points;
         std::vector<glm::vec4> feature_vectors;
 
-        std::vector<image> output(1);
         for (int scale = 0; scale < state.feature_textures.size(); ++scale)
         {
             for (int octave = 0; octave < octaves; ++octave)
             {
                 const int out_idx = scale + octave * state.feature_textures.size();
-                output[0].load_empty(base_width, base_height, 3);
                 glBindTexture(GL_TEXTURE_2D, state.feature_textures[scale]);
 
                 feature_vectors.resize(size_t(base_width >> octave) * (base_height >> octave));
@@ -240,12 +233,12 @@ namespace mpp::sift {
                     if (glm::any(glm::notEqual(feat, glm::vec4(0, 0, 0, 1.f))))
                     {
                         feature_points[octave].push_back(feature{ float(feat.x), float(feat.y), float(feat.z), float(feat.w) });
-                        output[0].store(int(feat.x), int(feat.y), glm::vec4(1, 1, 1, 1));
+                        all_feature_points.emplace_back(feature{ float(feat.x), float(feat.y), float(feat.z), float(feat.w) });
                     }
                 }
             }
         }
         plog.next("Download Features");
-        return output;
+        return all_feature_points;
     }
 }

@@ -8,5 +8,13 @@ namespace mpp {
 
 namespace mpp::sift
 {
-    std::vector<image> sift(const image& img, size_t octaves, size_t feature_scales);
+    struct feature
+    {
+        float x;
+        float y;
+        float sigma;
+        float scale;
+    };
+
+    std::vector<feature> sift(const image& img, size_t octaves, size_t feature_scales);
 }

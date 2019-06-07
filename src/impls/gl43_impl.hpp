@@ -1,6 +1,9 @@
 #pragma once
 
 #include <visualization.hpp>
+#include <cstdint>
+#include <processing/sift/sift.hpp>
+#include <processing/image.hpp>
 
 namespace mpp
 {
@@ -13,6 +16,24 @@ namespace mpp
         void on_end(program_state& state) final override;
 
     private:
+        void add_img(const char* path);
+        struct
+        {
+            std::uint32_t program;
+            std::int32_t  in_texture_location;
+        } full_screen;
 
+        struct
+        {
+            std::uint32_t program;
+            std::uint32_t vao;
+            std::uint32_t vbo;
+        } points;
+
+        image img;
+        std::vector<std::uint32_t> textures;
+        std::vector<std::vector<sift::feature>> features;
+        float point_size = 4.f;
+        int current_texture = 0;
     };
 }
