@@ -84,7 +84,7 @@ void main()
     }
 
     float d = texelFetch(u_current_tex, px, u_mip).r;
-    const float threshold = 0.01f;
+    const float threshold = 0.007f;
     if(d < threshold)
     {
         color = vec4(0, 0, 0, 1);
@@ -126,10 +126,18 @@ void main()
     hessian[2][2] = (sval_p + sval_n) - 2 * d;
     hessian[1][2] = hessian[2][1] = (sval_p_yval_p + sval_n_yval_n - sval_n_yval_p - sval_p_yval_n) / 4.f;
 
+    // if any offset values are greater than 0.5, discard the point.
     vec3 interpolated = inverse(hessian) * gradient;
-    if(all(lessThan(abs(interpolated), vec3(0.5))))
+    bool offset_lt_half = all(lessThan(abs(interpolated), vec3(0.5)));
+
+    // if the ratio of the eigen values of the upper left 2x2 hessian matrix are greater than a given threshold, discard them as they lie on an edge.
+    float eigen_val_1 = hessian[0][0] - hessian[0][1];
+    float eigen_val_2 = hessian[0][0] + hessian[0][1];
+    bool eigen_values_valid = min(eigen_val_1, eigen_val_2) / max(eigen_val_1, eigen_val_2) < 5.f;
+
+    if(offset_lt_half && eigen_values_valid)
     {
-        float step_size = 1 << u_mip;
+        vec3 step_size = vec3(1 << u_mip, 1 << u_mip, 1.f);
         vec3 start_point = vec3(vec2(px), u_scale);
         vec3 final_point = (start_point + interpolated) * step_size;
 
@@ -191,7 +199,7 @@ void main()
     if(cmax_val < val_curr || cmin_val > val_curr)
         color = vec4(px.x, px.y, u_scale, 1);
     else
-        color = vec4(0, 0, 0, 1);
+        discard;
 }
 )";
 }

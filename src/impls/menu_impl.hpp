@@ -1,6 +1,7 @@
 #pragma once
 
 #include <visualization.hpp>
+#include <cstdint>
 
 namespace mpp
 {
@@ -13,6 +14,6 @@ namespace mpp
         void on_end(program_state& state) final override;
         
     private:
-
+        std::uint32_t _logo;
     };
 }

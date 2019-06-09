@@ -115,9 +115,8 @@ void main()
         glGenVertexArrays(1, &points.vao);
         glBindVertexArray(points.vao);
         glGenBuffers(1, &points.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, points.vbo);
+        glGenBuffers(1, &points.ori_vbo);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
 
         add_img("../../res/IMG_20190605_174704.jpg");
         add_img("../../res/IMG_20190605_174705.jpg");
@@ -137,13 +136,19 @@ void main()
         glBindVertexArray(points.vao);
         glUseProgram(points.program);
         glBindBuffer(GL_ARRAY_BUFFER, points.vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
         glPointSize(point_size);
         glBufferData(GL_ARRAY_BUFFER, features[current_texture].size() * sizeof(sift::feature), features[current_texture].data(), GL_DYNAMIC_DRAW);
         glDrawArrays(GL_POINTS, 0, features[current_texture].size());
 
+        glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
+        glBufferData(GL_ARRAY_BUFFER, orientation_dbg[current_texture].size() * sizeof(glm::vec2), orientation_dbg[current_texture].data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_LINES, 0, orientation_dbg[current_texture].size());
+
         if (ImGui::Begin("Settings"))
         {
-            ImGui::DragInt("Texture", &current_texture, 0.1f, 0, textures.size()-1);
+            ImGui::DragInt("Texture", &current_texture, 0.01f, 0, textures.size()-1);
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
             ImGui::End();
         }
@@ -160,10 +165,14 @@ void main()
     {
         std::ifstream file(path, std::ios::binary | std::ios::in);
         img.load_stream(file, 1);
+        auto& ori = orientation_dbg.emplace_back();
         for (auto& feat : features.emplace_back(sift::sift(img, 4, 3)))
         {
             feat.x = (feat.x / img.dimensions().x) * 2.f - 1.f;
             feat.y = -((feat.y / img.dimensions().y) * 2.f - 1.f);
+
+            ori.emplace_back(glm::vec2(feat.x, feat.y));
+            ori.emplace_back(glm::vec2(feat.x, feat.y) + 0.05f*glm::vec2(glm::cos(feat.orientation), glm::sin(feat.orientation)));
         }
         textures.emplace_back(allocate_textures(GL_RED, true, img));
     }

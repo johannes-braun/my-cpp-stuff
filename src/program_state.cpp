@@ -89,6 +89,9 @@ namespace mpp
                 glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM, 0, nullptr, GL_FALSE);
                 glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0, nullptr, GL_TRUE);
 
+                ImGui::GetIO().Fonts->AddFontFromFileTTF("../../res/GoogleSansMedium.ttf", 14.0f);
+                ImGui::GetIO().Fonts->AddFontFromFileTTF("../../res/GoogleSansBlack.ttf", 20.0f);
+
                 state->on_start(*this);
                 time_point last_checkmark = std::chrono::steady_clock::now();
                 while (!glfwWindowShouldClose(window.get()))

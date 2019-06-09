@@ -114,6 +114,18 @@ namespace mpp::sift::detail
         difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R32F, false);
         feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA32F, true);
 
+        // Create Renderbuffers for stencil testing
+        feature_stencil_buffers.resize(num_feature_scales * num_octaves);
+        glGenRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
+        for (int oct = 0; oct < num_octaves; ++oct)
+        {
+            for (int feat = 0; feat < num_feature_scales; ++feat)
+            {
+                glBindRenderbuffer(GL_RENDERBUFFER, feature_stencil_buffers[feat + oct * num_feature_scales]);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width >> oct, height >> oct);
+            }
+        }
+
         // Create one Framebuffer for each Octave (mip-level)
         framebuffers.resize(num_octaves);
         glGenFramebuffers(int(framebuffers.size()), framebuffers.data());
@@ -129,6 +141,7 @@ namespace mpp::sift::detail
         glDeleteTextures(int(gaussian_textures.size()), gaussian_textures.data());
         glDeleteTextures(int(difference_of_gaussian_textures.size()), difference_of_gaussian_textures.data());
         glDeleteTextures(int(feature_textures.size()), feature_textures.data());
+        glDeleteRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
         glDeleteProgram(gauss_blur.program);
         glDeleteProgram(difference.program);
         glDeleteProgram(maximize.program);

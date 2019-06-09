@@ -414,8 +414,6 @@ static bool CheckProgram(std::uint32_t handle, const char* desc)
 
 bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
 {
-    ImGui::GetIO().Fonts->AddFontFromFileTTF("../../res/GoogleSansMedium.ttf", 14.0f);
-
     // Backup GL state
     std::int32_t last_texture, last_array_buffer;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);

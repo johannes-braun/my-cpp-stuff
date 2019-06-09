@@ -23,6 +23,7 @@ namespace mpp::sift::detail
         std::vector<std::uint32_t> gaussian_textures;
         std::vector<std::uint32_t> difference_of_gaussian_textures;
         std::vector<std::uint32_t> feature_textures;
+        std::vector<std::uint32_t> feature_stencil_buffers;
         std::vector<std::uint32_t> framebuffers;
         std::uint32_t empty_vao;
 
