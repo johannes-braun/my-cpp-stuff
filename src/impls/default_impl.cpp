@@ -3,10 +3,13 @@
 #include <program_state.hpp>
 #include <iostream>
 #include <glm/ext.hpp>
+#include <platform/opengl.hpp>
 
 namespace mpp
 {
-    default_impl::~default_impl() {}
+    default_impl::default_impl() {
+        use_environment<opengl_environment>();
+    }
     void default_impl::on_setup(program_state& state)
     {
         glfwWindowHint(GLFW_SAMPLES, 8);

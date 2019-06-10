@@ -11,6 +11,7 @@ namespace mpp
     class automaton_impl : public basic_visualization
     {
     public:
+        automaton_impl();
         ~automaton_impl();
         void on_setup(program_state& state) final override;
         void on_start(program_state& state) final override;
@@ -31,6 +32,6 @@ namespace mpp
         std::vector<glm::vec4> _tex_data;
         bool _running = false;
         int _radius = 3;
-        seconds _acc_time;
+        seconds _acc_time{ 0 };
     };
 }

@@ -3,9 +3,16 @@
 #include <program_state.hpp>
 #include <iostream>
 #include <glm/ext.hpp>
+#include <platform/environment.hpp>
+#include <platform/opengl.hpp>
 
 namespace mpp
 {
+    automaton_impl::automaton_impl()
+    {
+        use_environment<opengl_environment>();
+    }
+
     automaton_impl::~automaton_impl() {}
     void automaton_impl::on_setup(program_state& state)
     {

@@ -222,8 +222,8 @@ namespace mpp::sift {
             {
                 int x = px.x + win_x;
                 int y = px.y + win_y;
-                float xdiff = img.load(x + 1, y).r - img.load(x - 1, y).r;
-                float ydiff = img.load(x, y + 1).r - img.load(x, y - 1).r;
+                float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
+                float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
                 float mag = std::sqrt(xdiff * xdiff + ydiff * ydiff);
                 float theta = std::atan2(ydiff, xdiff) + pi; // normalize to [0, 2*PI]
                 int index = int((theta / (2 * pi)) * 36) % 36;
@@ -256,7 +256,7 @@ namespace mpp::sift {
         }
     }
 
-    std::vector<feature> sift(const image& img, size_t octaves, size_t feature_scales)
+    std::vector<feature> detect_features(const image& img, size_t octaves, size_t feature_scales)
     {
         // Before starting, capture the OpenGL state for a seamless interaction
         opengl_state_capture capture_state;

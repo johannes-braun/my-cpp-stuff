@@ -3,8 +3,6 @@
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
-#include <imgui/imgui_impl_opengl3.h>
-#include <opengl/mygl.hpp>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <chrono>
@@ -51,7 +49,6 @@ namespace mpp
 
             glfwDefaultWindowHints();
             state->on_setup(*this);
-            glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
             _state_threads.emplace(state, std::thread([=] {
                 struct window_destructor
                 {
@@ -73,41 +70,30 @@ namespace mpp
                 };
                 using time_point = std::chrono::steady_clock::time_point;
                 using duration = time_point::duration;
-                glfwMakeContextCurrent(window.get());
-                mygl::load(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
 
-                ImGui_ImplGlfw_InitForOpenGL(glfwGetCurrentContext(), true);
-                ImGui_ImplOpenGL3_Init();
+                if(glfwGetWindowAttrib(window.get(), GLFW_CLIENT_API) != GLFW_NO_API)
+                    glfwMakeContextCurrent(window.get());
 
-                glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-                glDebugMessageCallback([](GLenum source, GLenum type, std::uint32_t id, GLenum severity, std::int32_t length, const char* message, const void* userParam) {
-                    std::cout << message << '\n';
-                    }, nullptr);
-                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
-                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_LOW, 0, nullptr, GL_FALSE);
-                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM, 0, nullptr, GL_FALSE);
-                glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0, nullptr, GL_TRUE);
-
+                ImGui_ImplGlfw_Init(glfwGetCurrentContext(), true);
                 ImGui::GetIO().Fonts->AddFontFromFileTTF("../../res/GoogleSansMedium.ttf", 14.0f);
                 ImGui::GetIO().Fonts->AddFontFromFileTTF("../../res/GoogleSansBlack.ttf", 20.0f);
 
-                state->on_start(*this);
+                state->start(*this);
+
                 time_point last_checkmark = std::chrono::steady_clock::now();
                 while (!glfwWindowShouldClose(window.get()))
                 {
                     duration delta = std::chrono::steady_clock::now() - last_checkmark;
                     last_checkmark = std::chrono::steady_clock::now();
                     ImGui::SetCurrentContext(imgui_context.get());
-                    ImGui_ImplOpenGL3_NewFrame();
+                    state->begin_update(*this, delta);
                     ImGui_ImplGlfw_NewFrame();
                     ImGui::NewFrame();
 
-                    state->on_update(*this, delta);
+                    state->update(*this, delta);
 
                     ImGui::Render();
-                    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-                    glfwSwapBuffers(window.get());
+                    state->end_update(*this, delta);
                     glfwPollEvents();
                 }
                 state->on_end(*this);

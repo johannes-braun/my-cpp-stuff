@@ -23,8 +23,9 @@ namespace mpp
 
         void load_empty(std::int32_t width, std::int32_t height, std::int32_t components);
         void load_stream(std::istream& stream, std::optional<std::int32_t> desired_components = std::nullopt);
-        void save_stream(std::ostream& stream, file_format fmt = file_format::png);        
         void load_stream(std::istream&& stream, std::optional<std::int32_t> desired_components = std::nullopt);
+
+        void save_stream(std::ostream& stream, file_format fmt = file_format::png);        
         void save_stream(std::ostream&& stream, file_format fmt = file_format::png);
 
         glm::ivec2 dimensions() const noexcept;
@@ -32,8 +33,8 @@ namespace mpp
         std::int32_t components() const noexcept;
         char* data() noexcept;
         const char* data() const noexcept;
-        void store(std::int32_t x, std::int32_t y, glm::vec4 value);
-        glm::vec4 load(std::int32_t x, std::int32_t y) const;
+        void write(std::int32_t x, std::int32_t y, glm::vec4 value);
+        glm::vec4 read(std::int32_t x, std::int32_t y) const;
 
     private:
         std::int32_t _width = 0;

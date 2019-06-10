@@ -12,7 +12,7 @@ namespace mpp
     class caves_impl : public basic_visualization
     {
     public:
-        ~caves_impl();
+        caves_impl();
         void on_setup(program_state& state) final override;
         void on_start(program_state& state) final override;
         void on_update(program_state& state, seconds delta) final override;
@@ -49,7 +49,7 @@ namespace mpp
         float _base_point_size = 2.f;
         bool _running = false;
         int _radius = 3;
-        seconds _acc_time;
+        seconds _acc_time{ 0 };
 
         std::mt19937 _rng;
         std::uniform_int_distribution<int> _dist{ 0, 1 };

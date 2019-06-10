@@ -6,6 +6,7 @@
 #include <opengl/mygl_glfw.hpp>
 #include <iostream>
 #include <imgui/imgui.h>
+#include <platform/opengl.hpp>
 
 namespace mpp
 {
@@ -69,6 +70,10 @@ void main()
     color = vec4(1, 0, 0, 1);
 }
 )";
+    gl43_impl::gl43_impl()
+    {
+        use_environment<opengl_environment>();
+    }
 
     std::uint32_t allocate_textures(GLenum format, bool gen_mipmap, const image& img)
     {
@@ -166,7 +171,7 @@ void main()
         std::ifstream file(path, std::ios::binary | std::ios::in);
         img.load_stream(file, 1);
         auto& ori = orientation_dbg.emplace_back();
-        for (auto& feat : features.emplace_back(sift::sift(img, 4, 3)))
+        for (auto& feat : features.emplace_back(sift::detect_features(img, 4, 3)))
         {
             feat.x = (feat.x / img.dimensions().x) * 2.f - 1.f;
             feat.y = -((feat.y / img.dimensions().y) * 2.f - 1.f);

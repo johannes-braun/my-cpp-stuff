@@ -5,10 +5,13 @@
 #include <glm/ext.hpp>
 #include <random>
 #include <impls/caves_impl/marching_cubes.hpp>
+#include <platform/opengl.hpp>
 
 namespace mpp
 {
-    caves_impl::~caves_impl() {}
+    caves_impl::caves_impl() {
+        use_environment<opengl_environment>();
+    }
     void caves_impl::on_setup(program_state& state)
     {
         glfwWindowHint(GLFW_SAMPLES, 8);

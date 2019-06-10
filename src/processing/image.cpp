@@ -98,7 +98,7 @@ namespace mpp
     {
         return _data.data();
     }
-    void image::store(std::int32_t x, std::int32_t y, glm::vec4 value)
+    void image::write(std::int32_t x, std::int32_t y, glm::vec4 value)
     {
         char* d = &_data[size_t(y) * _width * _components + size_t(x) * _components];
         for (int i = 0; i < _components; ++i)
@@ -106,7 +106,7 @@ namespace mpp
             d[i] = char(value[i] * 255.f);
         }
     }
-    glm::vec4 image::load(std::int32_t x, std::int32_t y) const
+    glm::vec4 image::read(std::int32_t x, std::int32_t y) const
     {
         const char* d = &_data[size_t(y) * _width * _components + size_t(x) * _components];
         glm::vec4 val(0, 0, 0, 1);

@@ -2,17 +2,17 @@
 
 namespace mygl
 {
-    void load(MYGL_DISPATCH_NAME* d);
-    void load(MYGL_DISPATCH_NAME* d, loader_function fun);
+    void read(MYGL_DISPATCH_NAME* d);
+    void read(MYGL_DISPATCH_NAME* d, loader_function fun);
 
-    MYGL_DISPATCH_NAME::MYGL_DISPATCH_NAME(bool load)
+    MYGL_DISPATCH_NAME::MYGL_DISPATCH_NAME(bool read)
     {
-        if(load) mygl::load(this);
+        if(read) mygl::read(this);
     }
 
     MYGL_DISPATCH_NAME::MYGL_DISPATCH_NAME(loader_function loader)
     {
-        mygl::load(this, loader);
+        mygl::read(this, loader);
     }
     namespace { MYGL_DISPATCH_NAME static_dispatch; }
     MYGL_DISPATCH_NAME& get_static_dispatch() noexcept

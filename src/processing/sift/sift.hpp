@@ -17,5 +17,5 @@ namespace mpp::sift
         float orientation;
     };
 
-    std::vector<feature> sift(const image& img, size_t octaves, size_t feature_scales);
+    std::vector<feature> detect_features(const image& img, size_t octaves, size_t feature_scales);
 }

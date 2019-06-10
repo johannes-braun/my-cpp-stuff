@@ -10,9 +10,14 @@
 #include <impls/caves_impl.hpp>
 #include <impls/gl43_impl.hpp>
 #include <processing/image.hpp>
+#include <platform/opengl.hpp>
 
 namespace mpp
 {
+    menu_impl::menu_impl()
+    {
+        use_environment<opengl_environment>();
+    }
     menu_impl::~menu_impl()
     {
     }

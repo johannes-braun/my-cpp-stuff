@@ -50,14 +50,7 @@
 #define GLFW_HAS_VULKAN             (GLFW_VERSION_MAJOR * 1000 + GLFW_VERSION_MINOR * 100 >= 3200) // 3.2+ glfwCreateWindowSurface
 
 // Data
-enum GlfwClientApi
-{
-    GlfwClientApi_Unknown,
-    GlfwClientApi_OpenGL,
-    GlfwClientApi_Vulkan
-};
 thread_local GLFWwindow*          g_Window = NULL;
-thread_local GlfwClientApi        g_ClientApi = GlfwClientApi_Unknown;
 thread_local double               g_Time = 0.0;
 thread_local bool                 g_MouseJustPressed[5] = { false, false, false, false, false };
 thread_local GLFWcursor*          g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
@@ -124,7 +117,7 @@ void ImGui_ImplGlfw_CharCallback(GLFWwindow* window, unsigned int c)
     io.AddInputCharacter(c);
 }
 
-static bool ImGui_ImplGlfw_Init(GLFWwindow* window, bool install_callbacks, GlfwClientApi client_api)
+bool ImGui_ImplGlfw_Init(GLFWwindow* window, bool install_callbacks)
 {
     g_Window = window;
     g_Time = 0.0;
@@ -187,18 +180,7 @@ static bool ImGui_ImplGlfw_Init(GLFWwindow* window, bool install_callbacks, Glfw
         g_PrevUserCallbackChar = glfwSetCharCallback(window, ImGui_ImplGlfw_CharCallback);
     }
 
-    g_ClientApi = client_api;
     return true;
-}
-
-bool ImGui_ImplGlfw_InitForOpenGL(GLFWwindow* window, bool install_callbacks)
-{
-    return ImGui_ImplGlfw_Init(window, install_callbacks, GlfwClientApi_OpenGL);
-}
-
-bool ImGui_ImplGlfw_InitForVulkan(GLFWwindow* window, bool install_callbacks)
-{
-    return ImGui_ImplGlfw_Init(window, install_callbacks, GlfwClientApi_Vulkan);
 }
 
 void ImGui_ImplGlfw_Shutdown()
@@ -208,7 +190,6 @@ void ImGui_ImplGlfw_Shutdown()
         glfwDestroyCursor(g_MouseCursors[cursor_n]);
         g_MouseCursors[cursor_n] = NULL;
     }
-    g_ClientApi = GlfwClientApi_Unknown;
 }
 
 static void ImGui_ImplGlfw_UpdateMousePosAndButtons()
