@@ -7,6 +7,7 @@
 #include <iostream>
 #include <imgui/imgui.h>
 #include <platform/opengl.hpp>
+#include <map>
 
 namespace mpp
 {
@@ -65,9 +66,10 @@ void main()
 )";
     constexpr auto simple_color_frag_src = R"(#version 330 core
 layout(location=0) out vec4 color;
+uniform vec4 u_color;
 void main()
 {
-    color = vec4(1, 0, 0, 1);
+    color = u_color;
 }
 )";
     gl43_impl::gl43_impl()
@@ -101,6 +103,7 @@ void main()
     {
         glfwWindowHint(GLFW_SAMPLES, 4);
     }
+
     void gl43_impl::on_start(program_state& state)
     {
         glEnable(GL_MULTISAMPLE);
@@ -114,6 +117,7 @@ void main()
         const auto points_vert = create_shader(GL_VERTEX_SHADER, points_vert_src);
         const auto simple_color_frag = create_shader(GL_FRAGMENT_SHADER, simple_color_frag_src);
         points.program = create_program(simple_color_frag, points_vert);
+        points.u_color_location = glGetUniformLocation(points.program, "u_color");
         glDeleteShader(points_vert);
         glDeleteShader(simple_color_frag);
 
@@ -123,11 +127,29 @@ void main()
         glGenBuffers(1, &points.ori_vbo);
         glEnableVertexAttribArray(0);
 
+#if 1
         add_img("../../res/IMG_20190605_174704.jpg");
         add_img("../../res/IMG_20190605_174705.jpg");
-        add_img("../../res/bun.jpg");
-        add_img("../../res/arch.jpg");
-        add_img("../../res/butterfly.jpg");
+#elif 1
+        add_img("../../res/IMG_20190614_113934.jpg");
+        add_img("../../res/IMG_20190614_113954.jpg");
+#else
+        add_img("../../res/mango/m1.jpg");
+        add_img("../../res/mango/m3.jpg");
+#endif
+
+        sift::match_settings settings;
+        settings.relation_threshold = 0.8f;
+        settings.similarity_threshold = 0.9f;
+        auto matches12 = sift::match_features(features[0], features[1], settings);
+       /* auto matches13 = sift::match_features(features[0], features[2], 0.8f);
+        auto matches23 = sift::match_features(features[1], features[2], 0.8f);*/
+
+        for (int i = 0; i < matches12.size(); ++i)
+        {
+            auto& m = matches12[i];
+            ref.emplace_back(glm::vec2(m.a.x, m.a.y), glm::vec2(m.b.x, m.b.y));
+        }
     }
     void gl43_impl::on_update(program_state& state, seconds delta)
     {
@@ -140,23 +162,50 @@ void main()
 
         glBindVertexArray(points.vao);
         glUseProgram(points.program);
+        glUniform4f(points.u_color_location, 1.f, 0.4f, 0.1f, 1.f);
         glBindBuffer(GL_ARRAY_BUFFER, points.vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
         glPointSize(point_size);
         glBufferData(GL_ARRAY_BUFFER, features[current_texture].size() * sizeof(sift::feature), features[current_texture].data(), GL_DYNAMIC_DRAW);
         glDrawArrays(GL_POINTS, 0, features[current_texture].size());
-
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
+        glLineWidth(1.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
         glBufferData(GL_ARRAY_BUFFER, orientation_dbg[current_texture].size() * sizeof(glm::vec2), orientation_dbg[current_texture].data(), GL_DYNAMIC_DRAW);
         glDrawArrays(GL_LINES, 0, orientation_dbg[current_texture].size());
 
+        glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
+        glBufferData(GL_ARRAY_BUFFER, ref.size() * 2 * sizeof(glm::vec2), ref.data(), GL_DYNAMIC_DRAW);
+        glPointSize(8.f);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), nullptr);
+        glUniform4f(points.u_color_location, 0.1f, 0.5f, 1.f, 1.f);
+        glDrawArrays(GL_POINTS, 0, (num_matches==-1?ref.size(): num_matches));
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), reinterpret_cast<void const*>(sizeof(glm::vec2)));
+        glUniform4f(points.u_color_location, 0.4f, 0.9f, 1.f, 1.f);
+        glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
+        glLineWidth(2.f);
+        glDrawArrays(GL_LINES, 0, (num_matches == -1 ? ref.size() : num_matches) * 2);
+
+        double cx, cy;
+        glfwGetCursorPos(glfwGetCurrentContext(), &cx, &cy);
+        int fx, fy;
+        glfwGetFramebufferSize(glfwGetCurrentContext(), &fx, &fy);
+
         if (ImGui::Begin("Settings"))
         {
             ImGui::DragInt("Texture", &current_texture, 0.01f, 0, textures.size()-1);
+            ImGui::DragInt("Matches", &num_matches, 0.01f, -1, ref.size());
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
-            ImGui::End();
+            ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1-cy / fy) * 2.f - 1.f);
+
+            for (int i = 0; i < textures.size(); ++i)
+                if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(textures[i]), { 75.f, 75.f }))
+                    current_texture = i;
+
         }
+        ImGui::End();
     }
     void gl43_impl::on_end(program_state& state)
     {
@@ -171,7 +220,13 @@ void main()
         std::ifstream file(path, std::ios::binary | std::ios::in);
         img.load_stream(file, 1);
         auto& ori = orientation_dbg.emplace_back();
-        for (auto& feat : features.emplace_back(sift::detect_features(img, 4, 3)))
+
+
+        sift::detection_settings settings;
+        settings.octaves = 4;
+        settings.feature_scales = 3;
+        settings.orientation_magnitude_threshold = 0.0002f;
+        for (auto& feat : features.emplace_back(sift::detect_features(img, settings)))
         {
             feat.x = (feat.x / img.dimensions().x) * 2.f - 1.f;
             feat.y = -((feat.y / img.dimensions().y) * 2.f - 1.f);

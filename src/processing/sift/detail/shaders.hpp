@@ -84,12 +84,12 @@ void main()
     }
 
     float d = texelFetch(u_current_tex, px, u_mip).r;
-    const float threshold = 0.007f;
+   /* const float threshold = 0.0012f;
     if(d < threshold)
     {
         color = vec4(0, 0, 0, 1);
         return;
-    }
+    }*/
 
     float xval_p = texelFetch(u_current_tex, tcl(px + ivec2(1, 0)), u_mip).r;
     float xval_n = texelFetch(u_current_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
@@ -133,7 +133,7 @@ void main()
     // if the ratio of the eigen values of the upper left 2x2 hessian matrix are greater than a given threshold, discard them as they lie on an edge.
     float eigen_val_1 = hessian[0][0] - hessian[0][1];
     float eigen_val_2 = hessian[0][0] + hessian[0][1];
-    bool eigen_values_valid = min(eigen_val_1, eigen_val_2) / max(eigen_val_1, eigen_val_2) < 5.f;
+    bool eigen_values_valid = min(eigen_val_1, eigen_val_2) / max(eigen_val_1, eigen_val_2) < 0.5f;
 
     if(offset_lt_half && eigen_values_valid)
     {
@@ -152,6 +152,108 @@ void main()
     }
 }
 )";
+    constexpr auto orientation_frag = R"(#version 330 core
+in vec2 vs_uv;
+
+const int kernel_half_size = 7;
+const int kernel_size = kernel_half_size + kernel_half_size + 1;
+const int kernel_max_count = kernel_size * kernel_size;
+const float pi = 3.141592653587f;
+
+#define arr_def(TYPE, NAME, SIZE) TYPE NAME[SIZE]; int ptr_##NAME = 0;
+#define arr_push(NAME, VALUE) NAME[ptr_##NAME++] = VALUE;
+#define arr_len(NAME) (ptr_##NAME)
+
+uniform int u_mip;
+uniform int u_scale;
+uniform int u_orientation_slices;
+uniform float u_orientation_magnitude_threshold;
+uniform sampler2D u_images[16];
+
+layout(location = 0) out vec4 color;
+
+float gaussian(float sigma, float diff)
+{
+    float sqrt_2_pi = 2.50662827463f;
+    float inner = diff/sigma;
+    float nom = exp(-(inner * inner / 2));
+    return nom / (sigma * sqrt_2_pi);
+}
+
+void main()
+{
+    ivec2 px = ivec2(gl_FragCoord.xy);
+    ivec2 tsize = textureSize(u_images[u_scale], u_mip);
+
+    // Discard features where the window does not fit inside the image.
+    if (px.x - kernel_half_size <= 0 || px.x + kernel_half_size >= tsize.x - 1 || px.y - kernel_half_size <= 0 || px.y + kernel_half_size > tsize.y - 1)
+    {
+        color = vec4(-100.f, 0, 0, 1.f);    
+        return;
+    }
+
+    arr_def(float, angles, kernel_max_count);
+    arr_def(vec2, vectors, kernel_max_count);
+    vec4 feat = texelFetch(u_images[u_scale], ivec2(px.x, px.y), u_mip);
+    vec2 rdloc = feat.xy;
+    float rdscale = feat.z;
+
+    for (int win_y = -kernel_half_size; win_y <= kernel_half_size; ++win_y)
+    {
+        for (int win_x = -kernel_half_size; win_x <= kernel_half_size; ++win_x)
+        {
+            int x = int(round(rdloc.x)) + win_x;
+            int y = int(round(rdloc.y)) + win_y;
+
+            #define rd_img(X, Y) texelFetch(u_images[int(round(rdscale))], ivec2(X + 1, Y), u_mip).r
+
+            float xdiff = rd_img(x + 1, y) - rd_img(x - 1, y);
+            float ydiff = rd_img(x, y + 1) - rd_img(x, y - 1);
+            float mag = sqrt(xdiff * xdiff + ydiff * ydiff);
+
+            float g = gaussian(2.5f, length(vec2(win_x + 0.5f, win_y + 0.5f)));
+            arr_push(angles, atan(ydiff, xdiff));
+            arr_push(vectors, vec2(g * xdiff, g * ydiff));
+        }
+    }
+
+    float mag_max = 0;
+    float ang_max = pi/2.f;
+    int slices = 36;
+    int step = int((2 * pi) / slices);
+    for (int angle = 0; angle < slices; ++angle)
+    {
+        float min_angle = step * angle - pi;
+        float max_angle = min_angle + pi / 3.f;
+
+        vec2 sum = vec2(0, 0);
+        for (int i = 0; i < arr_len(angles); ++i)
+        {
+            float ang_mod = mod(angles[i] + 2 * pi, 2 * pi);
+            if (ang_mod >= min_angle && ang_mod <= max_angle)
+            {
+                sum += vectors[i];
+            }
+        }
+
+        float length2 = dot(sum, sum);
+        if (length2 > mag_max)
+        {
+            mag_max = length2;
+            ang_max = atan(sum.y, sum.x);
+        }
+    }
+    if (mag_max > 0.0002f)
+    {
+        color.r = ang_max;
+    }
+    else
+    {
+        color = vec4(-100.f, 0, 0, 1.f);
+    }
+}
+)";
+
     constexpr auto maximize_frag = R"(#version 330 core
 in vec2 vs_uv;
 uniform sampler2D u_previous_tex;

@@ -30,13 +30,16 @@ namespace mpp
             std::uint32_t vao;
             std::uint32_t vbo;
             std::uint32_t ori_vbo;
+            std::int32_t  u_color_location;
         } points;
 
         image img;
         std::vector<std::uint32_t> textures;
         std::vector<std::vector<sift::feature>> features;
+        std::vector<std::pair<glm::vec2, glm::vec2>> ref;
         std::vector<std::vector<glm::vec2>> orientation_dbg;
         float point_size = 4.f;
         int current_texture = 0;
+        int num_matches = -1;
     };
 }

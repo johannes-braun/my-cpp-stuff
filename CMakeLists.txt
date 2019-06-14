@@ -13,4 +13,7 @@ find_package(glm REQUIRED)
 find_package(glfw3 REQUIRED)
 target_link_libraries(mpp PUBLIC glm glfw)
 target_compile_definitions(mpp PUBLIC GLM_FORCE_PURE)
-target_compile_options(mpp PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/permissive->)
+target_compile_options(mpp PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/permissive-> $<$<CXX_COMPILER_ID:MSVC>:/Zc:twoPhase->)
+
+find_package(OpenMP)
+target_link_libraries(mpp PUBLIC OpenMP::OpenMP_CXX)

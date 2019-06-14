@@ -23,6 +23,7 @@ namespace mpp::sift::detail
         std::vector<std::uint32_t> gaussian_textures;
         std::vector<std::uint32_t> difference_of_gaussian_textures;
         std::vector<std::uint32_t> feature_textures;
+        std::vector<std::uint32_t> orientation_textures;
         std::vector<std::uint32_t> feature_stencil_buffers;
         std::vector<std::uint32_t> framebuffers;
         std::uint32_t empty_vao;
@@ -61,5 +62,14 @@ namespace mpp::sift::detail
             uniform_t u_mip_location;
             uniform_t u_border_location;
         } filter;
+
+        struct {
+            std::uint32_t program;
+            uniform_t u_mip_location;
+            uniform_t u_scale_location;
+            uniform_t u_orientation_slices_location;
+            uniform_t u_orientation_magnitude_threshold_location;
+            uniform_t u_img_location;
+        } orientation;
     };
 }
