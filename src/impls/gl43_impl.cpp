@@ -140,10 +140,9 @@ void main()
 
         sift::match_settings settings;
         settings.relation_threshold = 0.8f;
-        settings.similarity_threshold = 0.9f;
+        settings.similarity_threshold = 0.88f;
+        settings.max_match_count = 8;
         auto matches12 = sift::match_features(features[0], features[1], settings);
-       /* auto matches13 = sift::match_features(features[0], features[2], 0.8f);
-        auto matches23 = sift::match_features(features[1], features[2], 0.8f);*/
 
         for (int i = 0; i < matches12.size(); ++i)
         {
@@ -176,17 +175,21 @@ void main()
 
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
         glBufferData(GL_ARRAY_BUFFER, ref.size() * 2 * sizeof(glm::vec2), ref.data(), GL_DYNAMIC_DRAW);
+
+        // Draw Match Lines
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
+        glLineWidth(2.f);
+        glUniform4f(points.u_color_location, 1.f, 1.f, 1.f, 1.f);
+        glDrawArrays(GL_LINES, 0, (num_matches == -1 ? ref.size() : num_matches) * 2);
+        // Draw Match Src Points
         glPointSize(8.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), nullptr);
         glUniform4f(points.u_color_location, 0.1f, 0.5f, 1.f, 1.f);
         glDrawArrays(GL_POINTS, 0, (num_matches==-1?ref.size(): num_matches));
+        // Draw Match Dst Points
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), reinterpret_cast<void const*>(sizeof(glm::vec2)));
-        glUniform4f(points.u_color_location, 0.4f, 0.9f, 1.f, 1.f);
+        glUniform4f(points.u_color_location, 0.4f, 0.7f, 1.f, 1.f);
         glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
-
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
-        glLineWidth(2.f);
-        glDrawArrays(GL_LINES, 0, (num_matches == -1 ? ref.size() : num_matches) * 2);
 
         double cx, cy;
         glfwGetCursorPos(glfwGetCurrentContext(), &cx, &cy);
@@ -221,15 +224,18 @@ void main()
         img.load_stream(file, 1);
         auto& ori = orientation_dbg.emplace_back();
 
-
+        constexpr auto max_width = 512;
+        const float aspect = img.dimensions().x / img.dimensions().y;
+        const auto w = max_width;
+        const auto h = aspect * max_width;
         sift::detection_settings settings;
         settings.octaves = 4;
         settings.feature_scales = 3;
         settings.orientation_magnitude_threshold = 0.0002f;
-        for (auto& feat : features.emplace_back(sift::detect_features(img, settings)))
+        for (auto& feat : features.emplace_back(sift::detect_features(image(img).resize(w, h), settings)))
         {
-            feat.x = (feat.x / img.dimensions().x) * 2.f - 1.f;
-            feat.y = -((feat.y / img.dimensions().y) * 2.f - 1.f);
+            feat.x = (feat.x / w) * 2.f - 1.f;
+            feat.y = -((feat.y / h) * 2.f - 1.f);
 
             ori.emplace_back(glm::vec2(feat.x, feat.y));
             ori.emplace_back(glm::vec2(feat.x, feat.y) + 0.05f*glm::vec2(glm::cos(feat.orientation), glm::sin(feat.orientation)));

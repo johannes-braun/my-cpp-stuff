@@ -62,14 +62,5 @@ namespace mpp::sift::detail
             uniform_t u_mip_location;
             uniform_t u_border_location;
         } filter;
-
-        struct {
-            std::uint32_t program;
-            uniform_t u_mip_location;
-            uniform_t u_scale_location;
-            uniform_t u_orientation_slices_location;
-            uniform_t u_orientation_magnitude_threshold_location;
-            uniform_t u_img_location;
-        } orientation;
     };
 }

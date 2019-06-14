@@ -1,6 +1,7 @@
 #include <processing/image.hpp>
 #include <nothings/stb_image.h>
 #include <nothings/stb_image_write.h>
+#include <nothings/stb_image_resize.h>
 
 namespace mpp
 {
@@ -77,6 +78,15 @@ namespace mpp
     void image::save_stream(std::ostream&& stream, file_format fmt)
     {
         save_stream(stream, fmt);
+    }
+    image& image::resize(int width, int height)
+    {
+        std::vector<char> new_data(width * height * components());
+        stbir_resize_uint8(reinterpret_cast<const unsigned char*>(data()), _width, _height, 0, reinterpret_cast<unsigned char*>(new_data.data()), width, height, 0, components());
+        _data = std::move(new_data);
+        _width = width;
+        _height = height;
+        return *this;
     }
     glm::ivec2 image::dimensions() const noexcept
     {

@@ -104,27 +104,15 @@ namespace mpp::sift::detail
             filter.u_border_location = glGetUniformLocation(filter.program, "u_border");
         }
 
-        // Create Orientation Program to compute the main feature orientations
-        {
-            const auto orientation_fs = create_shader(GL_FRAGMENT_SHADER, shader_source::orientation_frag);
-            orientation.program = create_program(orientation_fs, screen_vert);
-            glDeleteShader(orientation_fs);
-            orientation.u_img_location = glGetUniformLocation(orientation.program, "u_images[0]");
-            orientation.u_mip_location = glGetUniformLocation(orientation.u_mip_location, "u_mip");
-            orientation.u_scale_location = glGetUniformLocation(orientation.program, "u_scale");
-            orientation.u_orientation_slices_location = glGetUniformLocation(orientation.u_orientation_slices_location, "u_orientation_slices");
-            orientation.u_orientation_magnitude_threshold_location = glGetUniformLocation(orientation.u_orientation_slices_location, "u_orientation_magnitude_threshold");
-        }
-
         // Allocate Textures needed for SIFT:
-        // gaussian [r32f   ]: num_feature_scales + 2 outer + 1 extra
-        // DoG      [r32f   ]: num_feature_scales + 2 outer
-        // features [rgba32f]: num_feature_scales
-        // temps    [r32f   ]: 2
-        temporary_textures = allocate_textures(2, width, height, GL_R32F, false);
-        gaussian_textures = allocate_textures(num_feature_scales + 3, width, height, GL_R32F, false);
-        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R32F, false);
-        feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA32F, true);
+        // gaussian [r16f   ]: num_feature_scales + 2 outer + 1 extra
+        // DoG      [r16f   ]: num_feature_scales + 2 outer
+        // features [rgba16f]: num_feature_scales
+        // temps    [r16f   ]: 2
+        temporary_textures = allocate_textures(2, width, height, GL_R16F, false);
+        gaussian_textures = allocate_textures(num_feature_scales + 3, width, height, GL_R16F, false);
+        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R16F, false);
+        feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA16F, true);
         orientation_textures = allocate_textures(num_feature_scales, width, height, GL_R16F, true);
 
         // Create Renderbuffers for stencil testing

@@ -22,6 +22,7 @@ namespace mpp::sift
     {
         float relation_threshold = 0.8f;
         float similarity_threshold = 0.9f; // > 90% matches
+        int max_match_count = std::numeric_limits<int>::max();
     };
 
     struct feature

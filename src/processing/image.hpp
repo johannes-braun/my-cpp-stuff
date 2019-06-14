@@ -28,6 +28,8 @@ namespace mpp
         void save_stream(std::ostream& stream, file_format fmt = file_format::png);        
         void save_stream(std::ostream&& stream, file_format fmt = file_format::png);
 
+        image& resize(int width, int height);
+
         glm::ivec2 dimensions() const noexcept;
         size_t size() const noexcept;
         std::int32_t components() const noexcept;

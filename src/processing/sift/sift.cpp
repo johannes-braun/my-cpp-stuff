@@ -9,6 +9,7 @@
 #include <map>
 #include <glm/gtx/hash.hpp>
 #include <unordered_set>
+#include <atomic>
 
 namespace mpp::sift {
     constexpr float pi = 3.141592653587f;
@@ -31,7 +32,7 @@ namespace mpp::sift {
 
         void next(const std::string& msg)
         {
-            std::cout << "STEP: [" << msg << "] -- " <<
+            std::cout << "|--  STEP: [" << msg << "] -- " <<
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - time_begin).count()
                 << "ms\n";
             time_begin = std::chrono::steady_clock::now();
@@ -53,24 +54,73 @@ namespace mpp::sift {
     {
         opengl_state_capture() {
             glGetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
-            glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex2d_binding);
+            for (int i = 0; i < 4; ++i)
+            {
+                glActiveTexture(GLenum(GL_TEXTURE0 + i));
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &tex2d_bindings[i]);
+            }
             glGetIntegerv(GL_VIEWPORT, viewport);
+            glGetIntegerv(GL_SCISSOR_BOX, scissor);
             glGetIntegerv(GL_DEPTH_TEST, &depth_test_enabled);
+            glGetIntegerv(GL_STENCIL_TEST, &stencil_test_enabled);
             glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
+            glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack_alignment);
+            glGetIntegerv(GL_PACK_ALIGNMENT, &pack_alignment);
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_framebuffer);
+            glGetFloatv(GL_COLOR_CLEAR_VALUE, clear_color);
+            glGetIntegerv(GL_STENCIL_CLEAR_VALUE, &clear_stencil);
+            glGetIntegerv(GL_STENCIL_FUNC, &stencil.func);
+            glGetIntegerv(GL_STENCIL_REF, &stencil.ref);
+            glGetIntegerv(GL_STENCIL_VALUE_MASK, &stencil.mask);
+            glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &stencil.zfail);
+            glGetIntegerv(GL_STENCIL_FAIL, &stencil.fail);
+            glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &stencil.pass);
+            glGetIntegerv(GL_STENCIL_WRITEMASK, &stencil.wmask);                            
         }
         ~opengl_state_capture() {
+            for (int i = 0; i < 4; ++i)
+            {
+                glActiveTexture(GLenum(GL_TEXTURE0 + i));
+                glBindTexture(GL_TEXTURE_2D, std::uint32_t(tex2d_bindings[i]));
+            }
             glActiveTexture(GLenum(active_texture));
-            glBindTexture(GL_TEXTURE_2D, std::uint32_t(tex2d_binding));
+            glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+            glClearStencil(clear_stencil);
+
+            glStencilFunc(GLenum(stencil.func), stencil.ref, stencil.mask);
+            glStencilOp(GLenum(stencil.fail), GLenum(stencil.zfail), GLenum(stencil.pass));
+            glStencilMask(stencil.wmask);
+
             glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+            glScissor(scissor[0], scissor[1], scissor[2], scissor[3]);
             glEnable(GL_DEPTH_TEST);
             glUseProgram(current_program);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
+            glPixelStorei(GL_PACK_ALIGNMENT, pack_alignment);
+            glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer);
         }
 
         int active_texture;
-        int tex2d_binding;
+        int tex2d_bindings[4];
         int viewport[4];
+        int scissor[4];
         int depth_test_enabled;
+        int stencil_test_enabled;
         int current_program;
+        int pack_alignment;
+        int unpack_alignment;
+        int current_framebuffer;
+        float clear_color[4];
+        int clear_stencil;
+        struct {
+            int func;
+            int ref;
+            int mask;
+            int fail;
+            int zfail;
+            int pass;
+            int wmask;
+        } stencil;
     };
 
     void dispatch()
@@ -102,6 +152,12 @@ namespace mpp::sift {
             dispatch();
         }
         glFinish();
+    }
+
+    void apply_viewport(int x, int y, int w, int h)
+    {
+        glViewport(x, y, w, h);
+        glScissor(x, y, w, h);
     }
 
     void generate_difference_of_gaussian(detail::sift_state & state)
@@ -141,7 +197,7 @@ namespace mpp::sift {
         for (int o = 0; o < state.num_octaves; ++o)
         {
             glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[o]);
-            glViewport(0, 0, base_width << o, base_height << o);
+            apply_viewport(0, 0, base_width << o, base_height << o);
             for (size_t feature_scale = 0; feature_scale < state.feature_textures.size(); ++feature_scale)
             {
                 glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, state.feature_textures[feature_scale], o);
@@ -189,11 +245,9 @@ namespace mpp::sift {
                 // update sigma uniform
                 // compute stuff
                 glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[mip]);
-                glViewport(0, 0, base_width >> mip, base_height >> mip);
+                apply_viewport(0, 0, base_width >> mip, base_height >> mip);
                 glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, state.feature_textures[scale], mip);
                 glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, state.feature_stencil_buffers[scale + mip * state.num_feature_scales]);
-
-                auto status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[std::int64_t(scale) + 0]);
@@ -217,40 +271,8 @@ namespace mpp::sift {
     }
     
     template<typename Fun>
-    void compute_orientations(detail::sift_state & state, const detection_settings& settings, /*int base_width, int base_height*/ const std::vector<imgf>& gaussian_images, int x, int y, int octave, int scale, Fun&& publish_orientation)
+    void compute_orientations(detail::sift_state & state, const detection_settings& settings, const std::vector<imgf>& gaussian_images, int x, int y, int octave, int scale, Fun&& publish_orientation)
     {
-        //glDisable(GL_STENCIL_TEST);
-        //glUseProgram(state.orientation.program);
-        //for(int i=0; i<state.feature_textures.size(); ++i)
-        //    glUniform1i(state.orientation.u_img_location + i, i);
-        //glUniform1f(state.orientation.u_orientation_magnitude_threshold_location, settings.orientation_magnitude_threshold);
-        //glUniform1i(state.orientation.u_orientation_slices_location, settings.orientation_slices);
-
-        //// leave out border of a couple of pixels
-        //for (int mip = 0; mip < state.num_octaves; ++mip)
-        //{
-        //    glUniform1i(state.orientation.u_mip_location, mip);
-        //    for (int i = 0; i < state.feature_textures.size(); ++i)
-        //    {
-        //        glActiveTexture(GLenum(GL_TEXTURE0 + i));
-        //        glBindTexture(GL_TEXTURE_2D, state.feature_textures[i]);
-        //    }
-        //    for (int scale = 0; scale < state.feature_textures.size(); ++scale)
-        //    {
-        //        glUniform1i(state.orientation.u_scale_location, scale);
-        //        // Bind previous, current and next scale DoG image
-        //        // set current feature image mip as stencil buffer
-        //        // update sigma uniform
-        //        // compute stuff
-        //        glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[mip]);
-        //        glViewport(0, 0, base_width >> mip, base_height >> mip);
-        //        glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, state.orientation_textures[scale], mip);
-        //        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, state.feature_stencil_buffers[scale + mip * state.num_feature_scales]);
-
-        //        dispatch();
-        //    }
-        //}
-
         const auto& img = gaussian_images[octave * state.difference_of_gaussian_textures.size() + scale];
         const glm::ivec2 px(x >> octave, y >> octave);
         const glm::ivec2 tsize(img.w, img.h);
@@ -371,10 +393,11 @@ namespace mpp::sift {
 
     std::vector<feature> detect_features(const image & img, const detection_settings& settings)
     {
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
         // Before starting, capture the OpenGL state for a seamless interaction
         opengl_state_capture capture_state;
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
         glDisable(GL_DEPTH_TEST);
 
         perf_log plog;
@@ -388,7 +411,7 @@ namespace mpp::sift {
 
         const int base_width = img.dimensions().x;
         const int base_height = img.dimensions().y;
-        glViewport(0, 0, base_width, base_height);
+        apply_viewport(0, 0, base_width, base_height);
 
         // STEP 1: Generate gauss-blurred images
         apply_gaussian(state);
@@ -418,9 +441,6 @@ namespace mpp::sift {
         filter_features(state, base_width, base_height);
         plog.next("Filter Features");
 
-        /*compute_orientations(state, settings, base_width, base_height);
-        plog.next("Compute Orientations");*/
-
         // Download texture data for further processing on the CPU
         std::vector<feature> all_feature_points;
         std::vector<size_t> scale_begins(state.feature_textures.size());
@@ -445,8 +465,6 @@ namespace mpp::sift {
         }
         plog.next("Download Gaussian");
 
-        int k = 0;
-
         for (int scale = 0; scale < state.feature_textures.size(); ++scale)
         {
             for (int octave = 0; octave < settings.octaves; ++octave)
@@ -458,52 +476,42 @@ namespace mpp::sift {
                 auto& dst = temp_feature_vectors[out_idx];
                 dst.resize(s);
                 glGetTexImage(GL_TEXTURE_2D, octave, GL_RGBA, GL_FLOAT, dst.data());
-                /*for (size_t i = 0; i < dst.size(); ++i)
-                {
-                    auto& tfeat = dst[i];
-                    if (glm::any(glm::notEqual(tfeat, glm::vec4(0, 0, 0, 1.f))))
-                    {
-                        compute_orientations(state, settings, gaussians, int(round(tfeat.x)), int(round(tfeat.y)), octave, int(round(tfeat.z)), [&](float orientation) {
-                            feature_vectors[scale].emplace_back(feature{ float(tfeat.x), float(tfeat.y), float(tfeat.z), float(tfeat.w), orientation, octave });
-                            });
-                    }
-                }*/
             }
         }
         plog.next("Download Features");
-        int z = 0;
+
+        // STEP 5: Compute main orientations at the feature points
+        // +
+        // STEP 6: Build feature descriptors
 #pragma omp parallel for schedule(dynamic)
         for (int scale = 0; scale < state.feature_textures.size(); ++scale)
         {
+            auto& fvec = feature_vectors[scale];
             for (int octave = 0; octave < settings.octaves; ++octave)
             {
-                //const auto dst_idx = octave * state.feature_textures.size() + scale;
                 auto& src = temp_feature_vectors[scale + octave * int(state.feature_textures.size())];
                 for (size_t i = 0; i < src.size(); ++i)
                 {
                     auto& tfeat = src[i];
                     if (glm::any(glm::notEqual(tfeat, glm::vec4(0, 0, 0, 1.f))))
                     {
+                        // Conditional. Calls the lambda only if orientation magnitude is greater than the threshold.
                         compute_orientations(state, settings, gaussians, int(round(tfeat.x)), int(round(tfeat.y)), octave, int(round(tfeat.z)), [&](float orientation) {
-                            feature_vectors[scale].emplace_back(feature{ float(tfeat.x), float(tfeat.y), float(tfeat.z), float(tfeat.w), orientation, octave });
+                            fvec.emplace_back(feature{ float(tfeat.x), float(tfeat.y), float(tfeat.z), float(tfeat.w), orientation, octave });
                             });
                     }
                 }
             }
-        }
-        plog.next("Compute Orientations");
-
-#pragma omp parallel for
-        for(int i=0; i<feature_vectors.size(); ++i)
-            for(auto& feat : feature_vectors[i])
+            for (auto& feat : fvec)
                 build_feature_descriptor(state, gaussians[feat.octave * settings.feature_scales + size_t(std::round(feat.sigma))], feat.octave, size_t(std::round(feat.sigma)), feat);
-        plog.next("Compute Descriptors");
+        }
+        plog.next("Compute Orientations and Descriptors");
 
+        // Merge multithreaded results
         for (const auto& x : feature_vectors)
             all_feature_points.insert(all_feature_points.end(), x.begin(), x.end());
         plog.next("Merging Features");
 
-        glDisable(GL_STENCIL_TEST);
         return all_feature_points;
     }
 
@@ -522,8 +530,7 @@ namespace mpp::sift {
 
     std::vector<match> match_features(const std::vector<feature> & a, const std::vector<feature> & b, const match_settings& settings)
     {
-        std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>> amatches;
-        std::map<float, const sift::feature*, std::greater<float>> vec;
+        std::vector<std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>>> amatches(16);
 
         struct distance_compute
         {
@@ -532,31 +539,53 @@ namespace mpp::sift {
                 return cosine_similarity(a->descriptor.histrogram.data(), b->descriptor.histrogram.data(), 128);
             }
         } compute;
+        perf_log plog;
 
-        for (auto& fta : a)
+        std::atomic_int count = 0;
+#pragma omp parallel for schedule(static)
+        for (int i = 0; i < 16; ++i)
         {
-            vec.clear();
-            for (auto& ftb : b)
+            std::map<float, const sift::feature*, std::greater<float>> vec;
+            for (int j = i; j*16 + i < a.size(); ++j)
             {
-                const auto sim = compute(&fta, &ftb);
-                vec.emplace(sim, &ftb);
-            }
+                auto& fta = a[j * 16 + i];
+                auto& map = amatches[i];
+                vec.clear();
+                for (auto& ftb : b)
+                {
+                    const auto sim = compute(&fta, &ftb);
+                    vec.emplace(sim, &ftb);
+                }
 
-            auto first = vec.begin();
-            auto second = first;
-            second++;
-            if (!(vec.size() < 2 || second->first / first->first > settings.relation_threshold || first->first < settings.similarity_threshold))
-            {
-                amatches.emplace(first->first, std::make_pair(&fta, first->second));
+                auto first = vec.begin();
+                auto second = first;
+                second++;
+                if (!(vec.size() < 2 || second->first / first->first > settings.relation_threshold || first->first < settings.similarity_threshold))
+                {
+                    map.emplace(first->first, std::make_pair(&fta, first->second));
+                    ++count;
+                }
             }
+        }
+        plog.next("Compute Matches");
+
+        std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>> best_matches;
+        for (auto const& map : amatches)
+        {
+            for (const auto& item : map)
+                best_matches.emplace(item.first, item.second);
         }
 
         std::vector<match> features;
-        features.reserve(amatches.size());
-        for (auto const& m : amatches)
+        features.reserve(std::min(count.load(), settings.max_match_count));
+        auto it = best_matches.begin();
+        for (int i = 0; i < std::min(count.load(), settings.max_match_count); ++i)
         {
-            features.emplace_back(match{ *m.second.first, *m.second.second, m.first });
+            features.emplace_back(match{ *it->second.first, *it->second.second, it->first });
+            it++;
         }
+        plog.next("Merging Matches");
+
         return features;
     }
 }
