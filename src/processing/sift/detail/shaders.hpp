@@ -133,7 +133,7 @@ void main()
     // if the ratio of the eigen values of the upper left 2x2 hessian matrix are greater than a given threshold, discard them as they lie on an edge.
     float eigen_val_1 = hessian[0][0] - hessian[0][1];
     float eigen_val_2 = hessian[0][0] + hessian[0][1];
-    bool eigen_values_valid = min(eigen_val_1, eigen_val_2) / max(eigen_val_1, eigen_val_2) < 0.5f;
+    bool eigen_values_valid = min(eigen_val_1, eigen_val_2) / max(eigen_val_1, eigen_val_2) < 0.7f;
 
     if(offset_lt_half && eigen_values_valid)
     {

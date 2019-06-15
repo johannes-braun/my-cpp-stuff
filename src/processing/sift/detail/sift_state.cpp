@@ -3,7 +3,7 @@
 #include <processing/sift/detail/shaders.hpp>
 #include <opengl/mygl.hpp>
 #include <string>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 namespace mpp::sift::detail
 {
@@ -23,9 +23,12 @@ namespace mpp::sift::detail
         glLinkProgram(program);
         int log_len;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-        std::string info_log(log_len, '\0');
-        glGetProgramInfoLog(program, log_len, &log_len, info_log.data());
-        std::cout << info_log << '\n';
+        if (log_len > 3)
+        {
+            std::string info_log(log_len, '\0');
+            glGetProgramInfoLog(program, log_len, &log_len, info_log.data());
+            spdlog::info("Shader Compilation Output:\n{}", info_log);
+        }
         glDetachShader(program, vert);
         glDetachShader(program, frag);
         return program;
@@ -109,11 +112,11 @@ namespace mpp::sift::detail
         // DoG      [r16f   ]: num_feature_scales + 2 outer
         // features [rgba16f]: num_feature_scales
         // temps    [r16f   ]: 2
-        temporary_textures = allocate_textures(2, width, height, GL_R16F, false);
-        gaussian_textures = allocate_textures(num_feature_scales + 3, width, height, GL_R16F, false);
-        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R16F, false);
-        feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA16F, true);
-        orientation_textures = allocate_textures(num_feature_scales, width, height, GL_R16F, true);
+        temporary_textures = allocate_textures(2, width, height, GL_R32F, false);
+        gaussian_textures = allocate_textures(num_feature_scales + 3, width, height, GL_R32F, false);
+        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R32F, false);
+        feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA32F, true);
+        orientation_textures = allocate_textures(num_feature_scales, width, height, GL_R32F, true);
 
         // Create Renderbuffers for stencil testing
         feature_stencil_buffers.resize(num_feature_scales * num_octaves);

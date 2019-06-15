@@ -4,10 +4,10 @@
 #include <fstream>
 #include <string>
 #include <opengl/mygl_glfw.hpp>
-#include <iostream>
 #include <imgui/imgui.h>
 #include <platform/opengl.hpp>
 #include <map>
+#include <spdlog/spdlog.h>
 
 namespace mpp
 {
@@ -29,9 +29,12 @@ namespace mpp
             glLinkProgram(program);
             int log_len;
             glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-            std::string info_log(log_len, '\0');
-            glGetProgramInfoLog(program, log_len, &log_len, info_log.data());
-            std::cout << info_log << '\n';
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetProgramInfoLog(program, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
             glDetachShader(program, vert);
             glDetachShader(program, frag);
             return program;
@@ -101,6 +104,8 @@ void main()
 
     void gl43_impl::on_setup(program_state& state)
     {
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_SAMPLES, 4);
     }
 
@@ -121,13 +126,14 @@ void main()
         glDeleteShader(points_vert);
         glDeleteShader(simple_color_frag);
 
+        glGenVertexArrays(1, &empty_vao);
         glGenVertexArrays(1, &points.vao);
         glBindVertexArray(points.vao);
         glGenBuffers(1, &points.vbo);
         glGenBuffers(1, &points.ori_vbo);
         glEnableVertexAttribArray(0);
 
-#if 1
+#if 0
         add_img("../../res/IMG_20190605_174704.jpg");
         add_img("../../res/IMG_20190605_174705.jpg");
 #elif 1
@@ -140,23 +146,30 @@ void main()
 
         sift::match_settings settings;
         settings.relation_threshold = 0.8f;
-        settings.similarity_threshold = 0.88f;
-        settings.max_match_count = 8;
+        settings.similarity_threshold = 0.9f;
+        settings.max_match_count = 50;
         auto matches12 = sift::match_features(features[0], features[1], settings);
 
         for (int i = 0; i < matches12.size(); ++i)
         {
             auto& m = matches12[i];
-            ref.emplace_back(glm::vec2(m.a.x, m.a.y), glm::vec2(m.b.x, m.b.y));
+            ref.emplace_back(glm::vec2(((m.a.x+1)/2.f)-1, m.a.y), glm::vec2(((m.b.x + 1) / 2.f), m.b.y));
         }
     }
     void gl43_impl::on_update(program_state& state, seconds delta)
     {
+        double cx, cy;
+        glfwGetCursorPos(glfwGetCurrentContext(), &cx, &cy);
+        int fx, fy;
+        glfwGetFramebufferSize(glfwGetCurrentContext(), &fx, &fy);
+
         glDisable(GL_DEPTH_TEST);
+        glBindVertexArray(empty_vao);
         glUseProgram(full_screen.program);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textures[current_texture]);
         glUniform1i(full_screen.in_texture_location, 0);
+        glViewport(0, 0, fx / 2, fy);
+        glBindTexture(GL_TEXTURE_2D, textures[0]);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         glBindVertexArray(points.vao);
@@ -165,24 +178,50 @@ void main()
         glBindBuffer(GL_ARRAY_BUFFER, points.vbo);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
         glPointSize(point_size);
-        glBufferData(GL_ARRAY_BUFFER, features[current_texture].size() * sizeof(sift::feature), features[current_texture].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_POINTS, 0, features[current_texture].size());
+        glBufferData(GL_ARRAY_BUFFER, features[0].size() * sizeof(sift::feature), features[0].data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_POINTS, 0, features[0].size());
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
         glLineWidth(1.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
-        glBufferData(GL_ARRAY_BUFFER, orientation_dbg[current_texture].size() * sizeof(glm::vec2), orientation_dbg[current_texture].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_LINES, 0, orientation_dbg[current_texture].size());
+        glBufferData(GL_ARRAY_BUFFER, orientation_dbg[0].size() * sizeof(glm::vec2), orientation_dbg[0].data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_LINES, 0, orientation_dbg[0].size());
 
+        glDisable(GL_DEPTH_TEST);
+        glBindVertexArray(empty_vao);
+        glUseProgram(full_screen.program);
+        glActiveTexture(GL_TEXTURE0);
+        glUniform1i(full_screen.in_texture_location, 0);
+        glViewport(fx / 2, 0, fx/2, fy);
+        glBindTexture(GL_TEXTURE_2D, textures[1]);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glBindVertexArray(points.vao);
+        glUseProgram(points.program);
+        glUniform4f(points.u_color_location, 1.f, 0.4f, 0.1f, 1.f);
+        glBindBuffer(GL_ARRAY_BUFFER, points.vbo);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
+        glPointSize(point_size);
+        glBufferData(GL_ARRAY_BUFFER, features[1].size() * sizeof(sift::feature), features[1].data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_POINTS, 0, features[1].size());
+        glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
+        glLineWidth(1.f);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
+        glBufferData(GL_ARRAY_BUFFER, orientation_dbg[1].size() * sizeof(glm::vec2), orientation_dbg[1].data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_LINES, 0, orientation_dbg[1].size());
+        glViewport(0, 0, fx, fy);
+
+        glBindVertexArray(points.vao);
+        glUseProgram(points.program);
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
         glBufferData(GL_ARRAY_BUFFER, ref.size() * 2 * sizeof(glm::vec2), ref.data(), GL_DYNAMIC_DRAW);
 
         // Draw Match Lines
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
-        glLineWidth(2.f);
+        glLineWidth(1.f);
         glUniform4f(points.u_color_location, 1.f, 1.f, 1.f, 1.f);
         glDrawArrays(GL_LINES, 0, (num_matches == -1 ? ref.size() : num_matches) * 2);
         // Draw Match Src Points
-        glPointSize(8.f);
+        glPointSize(4.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), nullptr);
         glUniform4f(points.u_color_location, 0.1f, 0.5f, 1.f, 1.f);
         glDrawArrays(GL_POINTS, 0, (num_matches==-1?ref.size(): num_matches));
@@ -191,27 +230,23 @@ void main()
         glUniform4f(points.u_color_location, 0.4f, 0.7f, 1.f, 1.f);
         glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
 
-        double cx, cy;
-        glfwGetCursorPos(glfwGetCurrentContext(), &cx, &cy);
-        int fx, fy;
-        glfwGetFramebufferSize(glfwGetCurrentContext(), &fx, &fy);
-
         if (ImGui::Begin("Settings"))
         {
-            ImGui::DragInt("Texture", &current_texture, 0.01f, 0, textures.size()-1);
+            //ImGui::DragInt("Texture", &current_texture, 0.01f, 0, textures.size()-1);
             ImGui::DragInt("Matches", &num_matches, 0.01f, -1, ref.size());
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
             ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1-cy / fy) * 2.f - 1.f);
 
-            for (int i = 0; i < textures.size(); ++i)
+           /* for (int i = 0; i < textures.size(); ++i)
                 if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(textures[i]), { 75.f, 75.f }))
-                    current_texture = i;
+                    current_texture = i;*/
 
         }
         ImGui::End();
     }
     void gl43_impl::on_end(program_state& state)
     {
+        glDeleteVertexArrays(1, &empty_vao);
         glDeleteProgram(full_screen.program);
         glDeleteProgram(points.program);
         glDeleteVertexArrays(1, &points.vao);

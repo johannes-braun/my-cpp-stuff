@@ -11,9 +11,12 @@ target_compile_features(mpp PUBLIC cxx_std_17)
 # Libraries
 find_package(glm REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(fmt REQUIRED)
+
 target_link_libraries(mpp PUBLIC glm glfw)
 target_compile_definitions(mpp PUBLIC GLM_FORCE_PURE)
-target_compile_options(mpp PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/permissive-> $<$<CXX_COMPILER_ID:MSVC>:/Zc:twoPhase->)
+target_compile_options(mpp PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/permissive->)
 
-find_package(OpenMP)
-target_link_libraries(mpp PUBLIC OpenMP::OpenMP_CXX)
+target_link_libraries(mpp PRIVATE spdlog::spdlog)
+target_link_libraries(mpp PRIVATE fmt::fmt fmt::fmt-header-only)
