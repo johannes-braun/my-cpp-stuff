@@ -53,9 +53,9 @@ namespace mpp
         f.row(1) = v.segment<3>(3);
         f.row(2) = v.segment<3>(6);
 
-        Eigen::JacobiSVD<decltype(f)> svd(f, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::JacobiSVD<decltype(f)> svd(f, Eigen::ComputeFullU | Eigen::ComputeFullV);
         Eigen::Matrix3f s = svd.singularValues().asDiagonal();
-        s(3, 3) = 0.f;
+        s(2, 2) = 0.f;
         f = svd.matrixU() * s * svd.matrixV().transpose();
         return reinterpret_cast<const glm::mat3&>(f);
     }

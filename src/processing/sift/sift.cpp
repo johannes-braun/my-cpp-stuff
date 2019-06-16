@@ -370,12 +370,12 @@ namespace mpp::sift {
         return std::make_shared<sift_cache>(num_octaves, num_feature_scales);
     }
 
-    std::vector<feature> detect_features(const image& img, const detection_settings& settings)
+    std::vector<feature> detect_features(const image& img, const detection_settings& settings, dst_system system)
     {
         auto in_state = create_cache(settings.octaves, settings.feature_scales);
-        return detect_features(*in_state, img, settings);
+        return detect_features(*in_state, img, settings, system);
     }
-    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings)
+    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings, dst_system system)
     {
         perf_log plog("SIFT");
         plog.start();
@@ -501,6 +501,22 @@ namespace mpp::sift {
             all_feature_points.insert(all_feature_points.end(), x.begin(), x.end());
         plog.step("Merge multithreaded results");
 
+        if (system == dst_system::normalized_coordinates)
+        {
+            std::for_each(all_feature_points.begin(), all_feature_points.end(), [&](feature& feat) {
+                feat.x = (2.f * feat.x / img.dimensions().x) - 1.f;
+                feat.y = -((2.f * feat.y / img.dimensions().y) - 1.f);
+                });
+            plog.step("Convert to normalized coordinates");
+        }
+        else if (system == dst_system::image_coordinates)
+        {
+            std::for_each(all_feature_points.begin(), all_feature_points.end(), [&](feature& feat) {
+                feat.x = feat.x / img.dimensions().x;
+                feat.y = feat.y / img.dimensions().y;
+                });
+            plog.step("Convert to image coordinates");
+        }
         return all_feature_points;
     }
 

@@ -11,6 +11,7 @@
 #include <glm/gtx/string_cast.hpp>
 #include <processing/epipolar.hpp>
 #include <random>
+#include <processing/photogrammetry.hpp>
 
 namespace mpp
 {
@@ -148,6 +149,25 @@ void main()
         add_img("../../res/mango/m1.jpg");
         add_img("../../res/mango/m3.jpg");
 #endif
+
+        std::shared_ptr<image> imga = std::make_shared<image>();
+        std::ifstream file("../../res/IMG_20190616_140852.jpg", std::ios::binary | std::ios::in);
+        imga->load_stream(file, 1);
+        std::shared_ptr<image> imgb = std::make_shared<image>();
+        file = std::ifstream("../../res/IMG_20190616_140855.jpg", std::ios::binary | std::ios::in);
+        imgb->load_stream(file, 1);
+        std::shared_ptr<image> imgc = std::make_shared<image>();
+        file = std::ifstream("../../res/IMG_20190616_140857.jpg", std::ios::binary | std::ios::in);
+        imgc->load_stream(file, 1);
+
+        photogrammetry_processor pp;
+        pp.add_image(imgc);
+        pp.add_image(imgb);
+        pp.add_image(imga);
+        pp.match_all();
+        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgb)));
+        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgc)));
+        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imgb, imgc)));
 
         sift::match_settings settings;
         settings.relation_threshold = 0.8f;
@@ -307,11 +327,8 @@ void main()
         if (!_sift_cache)
             _sift_cache = sift::create_cache(settings.octaves, settings.feature_scales);
 
-        for (auto& feat : features.emplace_back(sift::detect_features(*_sift_cache, image(img).resize(w, h), settings)))
+        for (auto& feat : features.emplace_back(sift::detect_features(*_sift_cache, image(img).resize(w, h), settings, sift::dst_system::normalized_coordinates)))
         {
-            feat.x = (feat.x / w) * 2.f - 1.f;
-            feat.y = -((feat.y / h) * 2.f - 1.f);
-
             ori.emplace_back(glm::vec2(feat.x, feat.y));
             ori.emplace_back(glm::vec2(feat.x, feat.y) + 0.05f * glm::vec2(glm::cos(feat.orientation), glm::sin(feat.orientation)));
         }

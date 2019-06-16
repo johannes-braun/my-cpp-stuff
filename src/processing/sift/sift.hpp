@@ -26,6 +26,13 @@ namespace mpp::sift
         int max_match_count = std::numeric_limits<int>::max();
     };
 
+    enum class dst_system
+    {
+        pixel_coordinates, // results in range {[0, img.w), [0, img.h)}
+        image_coordinates, // results in range {[0, 1), [0, 1)}
+        normalized_coordinates // results in range {(-1, 1), (-1, 1)}
+    };
+
     struct feature
     {
         float x;
@@ -49,8 +56,8 @@ namespace mpp::sift
     struct sift_cache;
     std::shared_ptr<sift_cache> create_cache(size_t num_octaves, size_t num_feature_scales);
 
-    std::vector<feature> detect_features(const image& img, const detection_settings& settings);
-    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings);
+    std::vector<feature> detect_features(const image& img, const detection_settings& settings, dst_system system = dst_system::pixel_coordinates);
+    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings, dst_system system = dst_system::pixel_coordinates);
     std::vector<match> match_features(const std::vector<feature>& a, const std::vector<feature>& b, const match_settings& settings);
     std::vector<std::pair<glm::vec2, glm::vec2>> corresponding_points(const std::vector<match>& matches);
 }
