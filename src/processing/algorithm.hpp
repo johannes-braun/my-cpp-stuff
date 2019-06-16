@@ -51,19 +51,4 @@ namespace mpp
         static_assert(std::is_integral_v<Int>, "Given value is not an integral type.");
         std::for_each(policy, detail::count_iter(begin), detail::count_iter(end), std::forward<Fun>(fun));
     }
-
-    template<typename InputIterator, typename OutputIterator, typename Predicate, typename TransformFunc>
-    OutputIterator transform_if(
-        InputIterator&& begin,
-        InputIterator&& end,
-        OutputIterator&& out,
-        Predicate&& predicate,
-        TransformFunc&& transformer
-    ) {
-        for (; begin != end; ++begin, ++out) {
-            if (predicate(*begin))
-                * out = transformer(*begin);
-        }
-        return out;
-    }
 }

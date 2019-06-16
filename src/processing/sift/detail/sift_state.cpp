@@ -34,11 +34,15 @@ namespace mpp::sift::detail
         return program;
     }
 
-    std::vector<std::uint32_t> allocate_textures(size_t count, int width, int height, GLenum format, bool gen_mipmap)
+    std::vector<std::uint32_t> allocate_textures(size_t count)
     {
         std::vector<std::uint32_t> tex(count);
         glGenTextures(int(tex.size()), tex.data());
+        return tex;
+    }
 
+    void resize_textures(const std::vector<std::uint32_t>& tex, int width, int height, GLenum format, bool gen_mipmap)
+    {
         for (auto id : tex)
         {
             glBindTexture(GL_TEXTURE_2D, id);
@@ -47,16 +51,28 @@ namespace mpp::sift::detail
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            if(gen_mipmap)
+            if (gen_mipmap)
                 glGenerateMipmap(GL_TEXTURE_2D);
         }
-
-        return tex;
     }
 
-    sift_state::sift_state(size_t num_octaves, size_t num_feature_scales, int width, int height)
+    sift_state::sift_state(size_t num_octaves, size_t num_feature_scales)
         : num_octaves(num_octaves), num_feature_scales(num_feature_scales)
     {
+        // Allocate Textures needed for SIFT:
+        // gaussian [r16f   ]: num_feature_scales + 2 outer + 1 extra
+        // DoG      [r16f   ]: num_feature_scales + 2 outer
+        // features [rgba16f]: num_feature_scales
+        // temps    [r16f   ]: 2
+        temporary_textures = allocate_textures(2);
+        gaussian_textures = allocate_textures(num_feature_scales + 3);
+        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2);
+        feature_textures = allocate_textures(num_feature_scales);
+        orientation_textures = allocate_textures(num_feature_scales);
+        // Create Renderbuffers for stencil testing
+        feature_stencil_buffers.resize(num_feature_scales * num_octaves);
+        glGenRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
+
         // Shared Screen-Filling-Triangle Shader
         const auto screen_vert = create_shader(GL_VERTEX_SHADER, shader_source::screen_vert);
 
@@ -107,20 +123,21 @@ namespace mpp::sift::detail
             filter.u_border_location = glGetUniformLocation(filter.program, "u_border");
         }
 
-        // Allocate Textures needed for SIFT:
-        // gaussian [r16f   ]: num_feature_scales + 2 outer + 1 extra
-        // DoG      [r16f   ]: num_feature_scales + 2 outer
-        // features [rgba16f]: num_feature_scales
-        // temps    [r16f   ]: 2
-        temporary_textures = allocate_textures(2, width, height, GL_R32F, false);
-        gaussian_textures = allocate_textures(num_feature_scales + 3, width, height, GL_R32F, false);
-        difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2, width, height, GL_R32F, false);
-        feature_textures = allocate_textures(num_feature_scales, width, height, GL_RGBA32F, true);
-        orientation_textures = allocate_textures(num_feature_scales, width, height, GL_R32F, true);
+        // Create one Framebuffer for each Octave (mip-level)
+        framebuffers.resize(num_octaves);
+        glGenFramebuffers(int(framebuffers.size()), framebuffers.data());
 
-        // Create Renderbuffers for stencil testing
-        feature_stencil_buffers.resize(num_feature_scales * num_octaves);
-        glGenRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
+        // Create an empty vertex array to draw a screen-filling-triangle
+        glGenVertexArrays(1, &empty_vao);
+    }
+    void sift_state::resize(int width, int height)
+    {
+        resize_textures(temporary_textures, width, height, GL_R32F, false);
+        resize_textures(gaussian_textures, width, height, GL_R32F, false);
+        resize_textures(difference_of_gaussian_textures, width, height, GL_R32F, false);
+        resize_textures(feature_textures, width, height, GL_RGBA32F, true);
+        resize_textures(orientation_textures, width, height, GL_R32F, true);
+
         for (int oct = 0; oct < num_octaves; ++oct)
         {
             for (int feat = 0; feat < num_feature_scales; ++feat)
@@ -129,13 +146,6 @@ namespace mpp::sift::detail
                 glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width >> oct, height >> oct);
             }
         }
-
-        // Create one Framebuffer for each Octave (mip-level)
-        framebuffers.resize(num_octaves);
-        glGenFramebuffers(int(framebuffers.size()), framebuffers.data());
-
-        // Create an empty vertex array to draw a screen-filling-triangle
-        glGenVertexArrays(1, &empty_vao);
     }
     sift_state::~sift_state()
     {

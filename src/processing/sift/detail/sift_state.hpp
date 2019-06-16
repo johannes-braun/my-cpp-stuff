@@ -9,7 +9,8 @@ namespace mpp::sift::detail
     {
         using uniform_t = std::int32_t;
 
-        sift_state(size_t num_octaves, size_t num_feature_scales, int width, int height);
+        sift_state(size_t num_octaves, size_t num_feature_scales);
+        void resize(int width, int height);
         ~sift_state();
 
         sift_state(const sift_state&) = delete;

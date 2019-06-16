@@ -11,6 +11,7 @@
 #include <atomic>
 #include <processing/algorithm.hpp>
 #include <spdlog/spdlog.h>
+#include <processing/perf_log.hpp>
 
 namespace mpp::sift {
     namespace
@@ -26,17 +27,6 @@ namespace mpp::sift {
                 x = std::clamp(x, 0, w - 1);
                 y = std::clamp(y, 0, h - 1);
                 return glm::vec4(values[x + y * w]);
-            }
-        };
-
-        struct perf_log
-        {
-            std::chrono::steady_clock::time_point time_begin = std::chrono::steady_clock::now();
-
-            void next(const std::string& msg)
-            {
-                spdlog::info("{} ({} ms)", msg, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - time_begin).count());
-                time_begin = std::chrono::steady_clock::now();
             }
         };
 
@@ -370,8 +360,26 @@ namespace mpp::sift {
         }
     }
 
+    struct sift_cache
+    {
+        sift_cache(size_t num_octaves, size_t num_feature_scales) : state(num_octaves, num_feature_scales) {}
+        detail::sift_state state;
+    };
+    std::shared_ptr<sift_cache> create_cache(size_t num_octaves, size_t num_feature_scales)
+    {
+        return std::make_shared<sift_cache>(num_octaves, num_feature_scales);
+    }
+
     std::vector<feature> detect_features(const image& img, const detection_settings& settings)
     {
+        auto in_state = create_cache(settings.octaves, settings.feature_scales);
+        return detect_features(*in_state, img, settings);
+    }
+    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings)
+    {
+        perf_log plog("SIFT");
+        plog.start();
+
         // Before starting, capture the OpenGL state for a seamless interaction
         opengl_state_capture capture_state;
 
@@ -379,15 +387,15 @@ namespace mpp::sift {
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         glDisable(GL_DEPTH_TEST);
 
-        perf_log plog;
-        detail::sift_state state(settings.octaves, settings.feature_scales, img.dimensions().x, img.dimensions().y);
+        auto& state = cache.state;
+        state.resize(img.dimensions().x, img.dimensions().y);
         
         // Fill temp[0] with original image
         glBindTexture(GL_TEXTURE_2D, state.temporary_textures[0]);
         constexpr std::array<GLenum, 4> gl_components{ GL_RED, GL_RG, GL_RGB, GL_RGBA };
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.dimensions().x, img.dimensions().y, gl_components[img.components()-1], GL_UNSIGNED_BYTE, img.data());
 
-        plog.next("(SIFT) Init");
+        plog.step("Initialize prerequisites");
 
         const int base_width = img.dimensions().x;
         const int base_height = img.dimensions().y;
@@ -404,7 +412,7 @@ namespace mpp::sift {
             glBindTexture(GL_TEXTURE_2D, id);
             glGenerateMipmap(GL_TEXTURE_2D);
         }
-        plog.next("(SIFT) Gaussian");
+        plog.step("Generate gauss-blurred images");
 
         // STEP 2: Generate Difference-of-Gaussian images (only the full-size ones)
         generate_difference_of_gaussian(state);
@@ -414,15 +422,15 @@ namespace mpp::sift {
             glBindTexture(GL_TEXTURE_2D, id);
             glGenerateMipmap(GL_TEXTURE_2D);
         }
-        plog.next("(SIFT) Difference of Gaussian");
+        plog.step("Generate Difference-of-Gaussian images (only the full-size ones)");
 
         // STEP 3: Detect feature candidates by testing for extrema
         detect_candidates(state, base_width, base_height);
-        plog.next("(SIFT) Detect Candidates");
+        plog.step("Detect feature candidates by testing for extrema");
 
         // STEP 4: Filter features to exclude outliers and to improve accuracy
         filter_features(state, base_width, base_height);
-        plog.next("(SIFT) Filter Features");
+        plog.step("Filter features to exclude outliers and to improve accuracy");
 
         // Download texture data for further processing on the CPU
         std::vector<feature> all_feature_points;
@@ -446,7 +454,7 @@ namespace mpp::sift {
                 glGetTexImage(GL_TEXTURE_2D, octave, GL_RED, GL_FLOAT, gaussians[octave * state.difference_of_gaussian_textures.size() + scale].values.data());
             }
         }
-        plog.next("(SIFT) Download Gaussian");
+        plog.step("Download difference-of-gaussian texture data for further processing on the CPU");
 
         for (int scale = 0; scale < state.feature_textures.size(); ++scale)
         {
@@ -461,7 +469,7 @@ namespace mpp::sift {
                 glGetTexImage(GL_TEXTURE_2D, octave, GL_RGBA, GL_FLOAT, dst.data());
             }
         }
-        plog.next("(SIFT) Download Features");
+        plog.step("Download feature vectors");
 
         // STEP 5: Compute main orientations at the feature points
         // +
@@ -486,12 +494,12 @@ namespace mpp::sift {
             for (auto& feat : fvec)
                 build_feature_descriptor(state, gaussians[feat.octave * settings.feature_scales + size_t(std::round(feat.sigma))], feat.octave, size_t(std::round(feat.sigma)), feat);
             });
-        plog.next("(SIFT) Compute Orientations and Descriptors");
+        plog.step("Compute principal feature orientations and build descriptors");
 
         // Merge multithreaded results
         for (const auto& x : feature_vectors)
             all_feature_points.insert(all_feature_points.end(), x.begin(), x.end());
-        plog.next("(SIFT) Merging Features");
+        plog.step("Merge multithreaded results");
 
         return all_feature_points;
     }
@@ -511,7 +519,10 @@ namespace mpp::sift {
 
     std::vector<match> match_features(const std::vector<feature>& a, const std::vector<feature>& b, const match_settings& settings)
     {
-        std::vector<std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>>> amatches(16);
+        perf_log plog("SIFT Match");
+        plog.start();
+        constexpr auto stride = 16;
+        std::array<std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>>, stride> amatches;
 
         struct distance_compute
         {
@@ -520,15 +531,14 @@ namespace mpp::sift {
                 return cosine_similarity(a->descriptor.histrogram.data(), b->descriptor.histrogram.data(), 128);
             }
         } compute;
-        perf_log plog;
 
         std::atomic_int count = 0;
 
-        for_n(std::execution::par_unseq, 16, [&](int i) {
+        for_n(std::execution::par_unseq, stride, [&](int i) {
             std::map<float, const sift::feature*, std::greater<float>> vec;
-            for (int j = i; j * 16 + i < a.size(); ++j)
+            for (int j = i; j * stride + i < a.size(); ++j)
             {
-                auto& fta = a[j * 16 + i];
+                auto& fta = a[j * stride + i];
                 auto& map = amatches[i];
                 vec.clear();
                 for (auto& ftb : b)
@@ -547,7 +557,7 @@ namespace mpp::sift {
                 }
             }
             });
-        plog.next("(SIFT) Compute Matches");
+        plog.step("Compute matches by finding each features nearest neighbour");
 
         std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>> best_matches;
         for (auto const& map : amatches)
@@ -564,8 +574,16 @@ namespace mpp::sift {
             features.emplace_back(match{ *it->second.first, *it->second.second, it->first });
             it++;
         }
-        plog.next("(SIFT) Merging Matches");
+        plog.step("Merging multithreaded match results.");
 
         return features;
+    }
+    std::vector<std::pair<glm::vec2, glm::vec2>> corresponding_points(const std::vector<match>& matches)
+    {
+        std::vector<std::pair<glm::vec2, glm::vec2>> pt(matches.size());
+        size_t i = 0;
+        for (auto& m : matches)
+            pt[i++] = std::make_pair(glm::vec2(m.a.x, m.a.y), glm::vec2(m.b.x, m.b.y));
+        return pt;
     }
 }

@@ -13,10 +13,12 @@ find_package(glm REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
+find_package(Eigen3 REQUIRED)
 
-target_link_libraries(mpp PUBLIC glm glfw)
 target_compile_definitions(mpp PUBLIC GLM_FORCE_PURE)
 target_compile_options(mpp PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/permissive->)
 
+target_link_libraries(mpp PRIVATE glm glfw)
 target_link_libraries(mpp PRIVATE spdlog::spdlog)
 target_link_libraries(mpp PRIVATE fmt::fmt fmt::fmt-header-only)
+target_link_libraries(mpp PRIVATE Eigen3::Eigen)

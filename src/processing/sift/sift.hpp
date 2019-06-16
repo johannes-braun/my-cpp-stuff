@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <functional>
+#include <glm/glm.hpp>
 
 namespace mpp {
     class image;
@@ -45,7 +46,11 @@ namespace mpp::sift
         feature b;
         float similarity;
     };
+    struct sift_cache;
+    std::shared_ptr<sift_cache> create_cache(size_t num_octaves, size_t num_feature_scales);
 
     std::vector<feature> detect_features(const image& img, const detection_settings& settings);
+    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings);
     std::vector<match> match_features(const std::vector<feature>& a, const std::vector<feature>& b, const match_settings& settings);
+    std::vector<std::pair<glm::vec2, glm::vec2>> corresponding_points(const std::vector<match>& matches);
 }

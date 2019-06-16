@@ -1,4 +1,4 @@
-#include <impls/gl43_impl.hpp>
+﻿#include <impls/gl43_impl.hpp>
 #include <processing/sift/sift.hpp>
 #include <processing/image.hpp>
 #include <fstream>
@@ -8,6 +8,9 @@
 #include <platform/opengl.hpp>
 #include <map>
 #include <spdlog/spdlog.h>
+#include <glm/gtx/string_cast.hpp>
+#include <processing/epipolar.hpp>
+#include <random>
 
 namespace mpp
 {
@@ -58,16 +61,14 @@ void main()
     color = texture(in_texture, vec2(vs_uv.x, 1-vs_uv.y));
 }
 )";
-    }
-
-    constexpr auto points_vert_src = R"(#version 330 core
+        constexpr auto points_vert_src = R"(#version 330 core
 layout(location=0) in vec2 in_pos;
 void main()
 {
     gl_Position = vec4(in_pos, 0, 1);
 }
 )";
-    constexpr auto simple_color_frag_src = R"(#version 330 core
+        constexpr auto simple_color_frag_src = R"(#version 330 core
 layout(location=0) out vec4 color;
 uniform vec4 u_color;
 void main()
@@ -75,6 +76,7 @@ void main()
     color = u_color;
 }
 )";
+    }
     gl43_impl::gl43_impl()
     {
         use_environment<opengl_environment>();
@@ -137,6 +139,9 @@ void main()
         add_img("../../res/IMG_20190605_174704.jpg");
         add_img("../../res/IMG_20190605_174705.jpg");
 #elif 1
+        add_img("../../res/IMG_20190616_140852.jpg");
+        add_img("../../res/IMG_20190616_140855.jpg");
+#elif 1
         add_img("../../res/IMG_20190614_113934.jpg");
         add_img("../../res/IMG_20190614_113954.jpg");
 #else
@@ -146,14 +151,49 @@ void main()
 
         sift::match_settings settings;
         settings.relation_threshold = 0.8f;
-        settings.similarity_threshold = 0.9f;
+        settings.similarity_threshold = 0.83f;
         settings.max_match_count = 50;
         auto matches12 = sift::match_features(features[0], features[1], settings);
+        auto pts = sift::corresponding_points(matches12);
+        glm::mat3 best_mat = ransac_fundamental(pts);
+        spdlog::info("Fundamental matrix: {}", glm::to_string(best_mat));
+        for (int i = 0; i < pts.size(); ++i)
+        {
+            auto a = glm::vec3(pts[i].first, 1);
+            auto b = glm::vec3(pts[i].second, 1);
+            spdlog::info("Test a match:");
+            spdlog::info("  A = {}", to_string(a));
+            spdlog::info("  B = {}", to_string(b));
+            spdlog::info("  F = {}", to_string(best_mat));
+            spdlog::info("  B^T * F * A = {}", dot(b, best_mat * a));
+        }
+
+        //Camera matrix
+        //Aperture size: F1.8; Focal length: 28 mm; Sensor size: 1/2.55"; Pixel size: 1.4 μm
+        const float focal_length = 0.028f;
+        const float sensor_width = 0.0056448f;
+        const float sensor_height = 0.0042336f;
+        const float pixel_size = 1.4e-6f;
+
+        glm::mat4x3 k(1.f);
+        k[0][0] = focal_length;// *(sensor_width / pixel_size);
+        k[1][1] = focal_length;// *(sensor_height / pixel_size);
+        spdlog::info("K = {}", to_string(k));
+
+        /*std::uniform_real_distribution<float> dist(-1, 1);
+        std::mt19937 rng;
+        for (int i = 0; i < 10; ++i)
+        {
+            const glm::vec2 rnga(dist(rng), dist(rng));
+            const glm::vec3 rngb_hom(best_mat * glm::vec3(rnga, 1.f));
+            const glm::vec2 rngb(glm::vec2(rngb_hom) / rngb_hom.z);
+            ref.emplace_back(glm::vec2(((rnga.x + 1) / 2.f) - 1, rnga.y), glm::vec2(((rngb.x + 1) / 2.f), rngb.y));
+        }*/
 
         for (int i = 0; i < matches12.size(); ++i)
         {
             auto& m = matches12[i];
-            ref.emplace_back(glm::vec2(((m.a.x+1)/2.f)-1, m.a.y), glm::vec2(((m.b.x + 1) / 2.f), m.b.y));
+            ref.emplace_back(glm::vec2(((m.a.x + 1) / 2.f) - 1, m.a.y), glm::vec2(((m.b.x + 1) / 2.f), m.b.y));
         }
     }
     void gl43_impl::on_update(program_state& state, seconds delta)
@@ -191,7 +231,7 @@ void main()
         glUseProgram(full_screen.program);
         glActiveTexture(GL_TEXTURE0);
         glUniform1i(full_screen.in_texture_location, 0);
-        glViewport(fx / 2, 0, fx/2, fy);
+        glViewport(fx / 2, 0, fx / 2, fy);
         glBindTexture(GL_TEXTURE_2D, textures[1]);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
@@ -224,7 +264,7 @@ void main()
         glPointSize(4.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), nullptr);
         glUniform4f(points.u_color_location, 0.1f, 0.5f, 1.f, 1.f);
-        glDrawArrays(GL_POINTS, 0, (num_matches==-1?ref.size(): num_matches));
+        glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
         // Draw Match Dst Points
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), reinterpret_cast<void const*>(sizeof(glm::vec2)));
         glUniform4f(points.u_color_location, 0.4f, 0.7f, 1.f, 1.f);
@@ -232,14 +272,9 @@ void main()
 
         if (ImGui::Begin("Settings"))
         {
-            //ImGui::DragInt("Texture", &current_texture, 0.01f, 0, textures.size()-1);
             ImGui::DragInt("Matches", &num_matches, 0.01f, -1, ref.size());
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
-            ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1-cy / fy) * 2.f - 1.f);
-
-           /* for (int i = 0; i < textures.size(); ++i)
-                if (ImGui::ImageButton(reinterpret_cast<ImTextureID>(textures[i]), { 75.f, 75.f }))
-                    current_texture = i;*/
+            ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1 - cy / fy) * 2.f - 1.f);
 
         }
         ImGui::End();
@@ -252,6 +287,8 @@ void main()
         glDeleteVertexArrays(1, &points.vao);
         glDeleteBuffers(1, &points.vbo);
         glDeleteTextures(int(textures.size()), textures.data());
+        if (_sift_cache)
+            _sift_cache.reset();
     }
     void gl43_impl::add_img(const char* path)
     {
@@ -259,7 +296,7 @@ void main()
         img.load_stream(file, 1);
         auto& ori = orientation_dbg.emplace_back();
 
-        constexpr auto max_width = 512;
+        constexpr auto max_width = 400;
         const float aspect = img.dimensions().x / img.dimensions().y;
         const auto w = max_width;
         const auto h = aspect * max_width;
@@ -267,13 +304,16 @@ void main()
         settings.octaves = 4;
         settings.feature_scales = 3;
         settings.orientation_magnitude_threshold = 0.0002f;
-        for (auto& feat : features.emplace_back(sift::detect_features(image(img).resize(w, h), settings)))
+        if (!_sift_cache)
+            _sift_cache = sift::create_cache(settings.octaves, settings.feature_scales);
+
+        for (auto& feat : features.emplace_back(sift::detect_features(*_sift_cache, image(img).resize(w, h), settings)))
         {
             feat.x = (feat.x / w) * 2.f - 1.f;
             feat.y = -((feat.y / h) * 2.f - 1.f);
 
             ori.emplace_back(glm::vec2(feat.x, feat.y));
-            ori.emplace_back(glm::vec2(feat.x, feat.y) + 0.05f*glm::vec2(glm::cos(feat.orientation), glm::sin(feat.orientation)));
+            ori.emplace_back(glm::vec2(feat.x, feat.y) + 0.05f * glm::vec2(glm::cos(feat.orientation), glm::sin(feat.orientation)));
         }
         textures.emplace_back(allocate_textures(GL_RED, true, img));
     }

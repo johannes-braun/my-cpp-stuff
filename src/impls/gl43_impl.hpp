@@ -33,6 +33,7 @@ namespace mpp
             std::int32_t  u_color_location;
         } points;
 
+        std::shared_ptr<sift::sift_cache> _sift_cache;
         std::uint32_t empty_vao;
         image img;
         std::vector<std::uint32_t> textures;
