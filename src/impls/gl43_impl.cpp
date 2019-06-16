@@ -161,10 +161,14 @@ void main()
         imgc->load_stream(file, 1);
 
         photogrammetry_processor pp;
-        pp.add_image(imgc);
-        pp.add_image(imgb);
-        pp.add_image(imga);
+        pp.add_image(imgc, 0.028f);
+        pp.add_image(imgb, 0.028f);
+        pp.add_image(imga, 0.028f);
         pp.match_all();
+        const auto fh = pp.build_flat_hierarchy();
+
+        spdlog::info("Img 1 -> Img 2: {}", glm::to_string(*pp.relative_matrix(imga, imgb)));
+
         spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgb)));
         spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgc)));
         spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imgb, imgc)));
@@ -187,28 +191,6 @@ void main()
             spdlog::info("  F = {}", to_string(best_mat));
             spdlog::info("  B^T * F * A = {}", dot(b, best_mat * a));
         }
-
-        //Camera matrix
-        //Aperture size: F1.8; Focal length: 28 mm; Sensor size: 1/2.55"; Pixel size: 1.4 μm
-        const float focal_length = 0.028f;
-        const float sensor_width = 0.0056448f;
-        const float sensor_height = 0.0042336f;
-        const float pixel_size = 1.4e-6f;
-
-        glm::mat4x3 k(1.f);
-        k[0][0] = focal_length;// *(sensor_width / pixel_size);
-        k[1][1] = focal_length;// *(sensor_height / pixel_size);
-        spdlog::info("K = {}", to_string(k));
-
-        /*std::uniform_real_distribution<float> dist(-1, 1);
-        std::mt19937 rng;
-        for (int i = 0; i < 10; ++i)
-        {
-            const glm::vec2 rnga(dist(rng), dist(rng));
-            const glm::vec3 rngb_hom(best_mat * glm::vec3(rnga, 1.f));
-            const glm::vec2 rngb(glm::vec2(rngb_hom) / rngb_hom.z);
-            ref.emplace_back(glm::vec2(((rnga.x + 1) / 2.f) - 1, rnga.y), glm::vec2(((rngb.x + 1) / 2.f), rngb.y));
-        }*/
 
         for (int i = 0; i < matches12.size(); ++i)
         {

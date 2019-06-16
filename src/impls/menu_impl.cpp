@@ -9,6 +9,7 @@
 #include <impls/default_impl.hpp>
 #include <impls/caves_impl.hpp>
 #include <impls/gl43_impl.hpp>
+#include <impls/cameras_impl.hpp>
 #include <processing/image.hpp>
 #include <platform/opengl.hpp>
 
@@ -76,6 +77,7 @@ namespace mpp
             mk_button<automaton_impl>(state, "Automaton Impl");
             mk_button<caves_impl>(state, "Caves Impl");
             mk_button<gl43_impl>(state, "OpenGL 4.3 Impl");
+            mk_button<cameras_impl>(state, "Cameras Impl");
 
             ImGui::End();
         }
