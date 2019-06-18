@@ -4,6 +4,8 @@
 #include <visualization.hpp>
 #include <glm/glm.hpp>
 #include <camera.hpp>
+#include <processing/photogrammetry.hpp>
+#include <filesystem>
 
 namespace mpp
 {
@@ -17,11 +19,9 @@ namespace mpp
         void on_end(program_state& state) final override;
 
     private:
-        std::uint32_t _vbo;
-        std::uint32_t _vao;
-        std::uint32_t _program;
-        glm::vec3 _clear_color;
+        void emplace_file(const std::filesystem::path& img);
 
+        photogrammetry_processor _photogrammetry;
         glm::dvec2 _last_curpos;
         camera _camera;
     };

@@ -25,6 +25,7 @@ namespace mpp
 
         photogrammetry_processor();
         
+        void clear();
         void add_image(std::shared_ptr<image> img, float focal_length);
         void match_all();
 

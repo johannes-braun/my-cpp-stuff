@@ -12,14 +12,21 @@ namespace mpp
         _detection_settings.octaves = 4;
         _detection_settings.feature_scales = 3;
         _detection_settings.orientation_magnitude_threshold = 0.0002f;
-        _sift_cache = sift::create_cache(_detection_settings.octaves, _detection_settings.feature_scales);
 
         _match_settings.relation_threshold = 0.8f;
         _match_settings.similarity_threshold = 0.83f;
         _match_settings.max_match_count = 50;
     }
+    void photogrammetry_processor::clear()
+    {
+        _image_matches.clear();
+        _images.clear();
+    }
     void photogrammetry_processor::add_image(std::shared_ptr<image> img, float focal_length)
     {
+        if(!_sift_cache)
+            _sift_cache = sift::create_cache(_detection_settings.octaves, _detection_settings.feature_scales);
+
         const auto [insert_iter, did_emplace] = _images.emplace(std::move(img), image_info{});
         constexpr auto max_width = 400;
         auto& imgref = *insert_iter->first;
