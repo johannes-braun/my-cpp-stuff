@@ -72,6 +72,7 @@ namespace mpp::sift::detail
         // Create Renderbuffers for stencil testing
         feature_stencil_buffers.resize(num_feature_scales * num_octaves);
         glGenRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
+        glGenBuffers(1, &transform_feedback_buffer);
 
         // Shared Screen-Filling-Triangle Shader
         const auto screen_vert = create_shader(GL_VERTEX_SHADER, shader_source::screen_vert);
@@ -123,6 +124,36 @@ namespace mpp::sift::detail
             filter.u_border_location = glGetUniformLocation(filter.program, "u_border");
         }
 
+        // Create transform feedback program for feature count reduction
+        {
+            const auto reduction_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::transform_feedback_reduce_geom);
+            const auto reduction_vs = create_shader(GL_VERTEX_SHADER, shader_source::transform_feedback_reduce_vert);
+
+            transform_feedback_reduce.program = glCreateProgram();
+            glAttachShader(transform_feedback_reduce.program, reduction_gs);
+            glAttachShader(transform_feedback_reduce.program, reduction_vs);
+
+            constexpr const char* tf_out_names[3]{ "feature_values", "octave", "gl_SkipComponents3" };
+            glTransformFeedbackVaryings(transform_feedback_reduce.program, int(std::size(tf_out_names)), std::data(tf_out_names), GL_INTERLEAVED_ATTRIBS);
+            glLinkProgram(transform_feedback_reduce.program);
+            int log_len;
+            glGetProgramiv(transform_feedback_reduce.program, GL_INFO_LOG_LENGTH, &log_len);
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetProgramInfoLog(transform_feedback_reduce.program, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
+            glDetachShader(transform_feedback_reduce.program, reduction_gs);
+            glDetachShader(transform_feedback_reduce.program, reduction_vs);
+
+            glDeleteShader(reduction_gs);
+            glDeleteShader(reduction_vs);
+
+            transform_feedback_reduce.u_mip_location = glGetUniformLocation(transform_feedback_reduce.program, "u_mip");
+            transform_feedback_reduce.u_texture_location = glGetUniformLocation(transform_feedback_reduce.program, "u_texture");
+        }
+
         // Create one Framebuffer for each Octave (mip-level)
         framebuffers.resize(num_octaves);
         glGenFramebuffers(int(framebuffers.size()), framebuffers.data());
@@ -149,6 +180,7 @@ namespace mpp::sift::detail
     }
     sift_state::~sift_state()
     {
+        glDeleteBuffers(1, &transform_feedback_buffer);
         glDeleteVertexArrays(1, &empty_vao);
         glDeleteFramebuffers(int(framebuffers.size()), framebuffers.data());
         glDeleteTextures(int(temporary_textures.size()), temporary_textures.data());
@@ -160,5 +192,6 @@ namespace mpp::sift::detail
         glDeleteProgram(difference.program);
         glDeleteProgram(maximize.program);
         glDeleteProgram(filter.program);
+        glDeleteProgram(transform_feedback_reduce.program);
     }
 }

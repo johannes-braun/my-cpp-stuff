@@ -17,7 +17,7 @@ namespace mpp
         template<>
         constexpr const char* duration_type_name<std::chrono::microseconds>()
         {
-            return "µs";
+            return "us";
         }
         template<>
         constexpr const char* duration_type_name<std::chrono::milliseconds>()

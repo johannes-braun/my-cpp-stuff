@@ -203,4 +203,33 @@ void main()
         discard;
 }
 )";
+    constexpr auto transform_feedback_reduce_vert = R"(#version 330 core
+uniform sampler2D u_texture;
+uniform int u_mip;
+flat out vec4 vs_pos;
+void main()
+{
+    ivec2 ts = ivec2(textureSize(u_texture, u_mip));
+    vs_pos = texelFetch(u_texture, ivec2(gl_VertexID % ts.x, gl_VertexID / ts.x), u_mip);
+}
+)";
+    constexpr auto transform_feedback_reduce_geom = R"(#version 330 core
+layout(points) in;
+layout (points, max_vertices = 1) out;
+flat in vec4 vs_pos[];
+uniform int u_mip;
+out vec4 feature_values;
+out int octave;
+
+void main()
+{
+    if(any(notEqual(vs_pos[0].xyz, vec3(0, 0, 0))))
+    {
+        feature_values = vs_pos[0];
+        octave = u_mip;
+        EmitVertex();
+        EndPrimitive();
+    }
+}
+)";
 }
