@@ -6,6 +6,9 @@
 #include <camera.hpp>
 #include <processing/photogrammetry.hpp>
 #include <filesystem>
+#include <thread>
+#include <queue>
+#include <functional>
 
 namespace mpp
 {
@@ -21,8 +24,10 @@ namespace mpp
     private:
         void emplace_file(const std::filesystem::path& img);
 
-        photogrammetry_processor _photogrammetry;
+        photogrammetry_processor_async _photogrammetry;
         glm::dvec2 _last_curpos;
         camera _camera;
+        int _imgs_to_load;
+        std::atomic_int _img_counter;
     };
 }

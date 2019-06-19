@@ -70,14 +70,31 @@ namespace mpp
 
         if (ImGui::Begin("Settings"))
         {
+            ImGui::Text("Sizes");
+            ImGui::DragInt("Scales", reinterpret_cast<int*>(&_photogrammetry.base_processor().detection_settings().feature_scales), 0.01f, 0, 10);
+            ImGui::DragInt("Octaves", reinterpret_cast<int*>(&_photogrammetry.base_processor().detection_settings().octaves), 0.01f, 0, 10);
+            ImGui::Text("Orientation");
+            ImGui::DragFloat("Magnitude Thresh.", &_photogrammetry.base_processor().detection_settings().orientation_magnitude_threshold, 0.000002f, 0.f, 1.f);
+            ImGui::DragInt("Slices", &_photogrammetry.base_processor().detection_settings().orientation_slices, 0.01f, 0, 360);
             if (ImGui::Button("Open Images", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
             {
                 auto ps = open_files("Open Images");
+                _img_counter = 0;
+                _imgs_to_load = ps.size();
                 for (const auto& path : ps)
                 {
                     emplace_file(path);
                 }
+                _photogrammetry.detect_all();
             }
+            if(_imgs_to_load != 0 && _imgs_to_load != _img_counter.load())
+                ImGui::ProgressBar(float(_img_counter.load()) / _imgs_to_load);
+
+            ImGui::Spacing();
+            ImGui::DragInt("Max. Matches", &_photogrammetry.base_processor().match_settings().max_match_count, 0.01f, 0, 2500);
+            ImGui::DragFloat("Relation Thresh.", &_photogrammetry.base_processor().match_settings().relation_threshold, 0.001f, 0.f, 1.f);
+            ImGui::DragFloat("Similarity Thresh.", &_photogrammetry.base_processor().match_settings().similarity_threshold, 0.001f, 0.f, 1.f);
+            
             if (ImGui::Button("Match", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
             {
                 _photogrammetry.match_all();
@@ -94,6 +111,6 @@ namespace mpp
         std::shared_ptr<image> img = std::make_shared<image>();
         std::ifstream file(path, std::ios::binary | std::ios::in);
         img->load_stream(file, 1);
-        _photogrammetry.add_image(std::move(img), 0.028f);
+        _photogrammetry.add_image(std::move(img), 0.028f, [this] {_img_counter++; });
     }
 }

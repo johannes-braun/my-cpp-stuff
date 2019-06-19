@@ -5,10 +5,10 @@
 #include "mygl_functions.hpp"
 
 namespace mygl { 
-void read();
-void read(loader_function fun);
-void read(MYGL_DISPATCH_NAME* d);
-void read(MYGL_DISPATCH_NAME* d, loader_function fun);
+void load();
+void load(loader_function fun);
+void load(MYGL_DISPATCH_NAME* d);
+void load(MYGL_DISPATCH_NAME* d, loader_function fun);
 }
 
 #if defined(MYGL_IMPLEMENTATION)

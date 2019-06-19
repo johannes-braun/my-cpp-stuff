@@ -1049,26 +1049,26 @@ namespace {
     }
 }
 
-void read(MYGL_DISPATCH_NAME* d)
+void load(MYGL_DISPATCH_NAME* d)
 {
     function_loader loader;
     load_impl(d, loader);
 }
 
-void read(MYGL_DISPATCH_NAME* d, loader_function fun)
+void load(MYGL_DISPATCH_NAME* d, loader_function fun)
 {
     function_loader loader(fun);
     load_impl(d, loader);
 }
 
-void read()
+void load()
 {
-    read(&get_static_dispatch());
+    load(&get_static_dispatch());
 }
 
-void read(loader_function fun)
+void load(loader_function fun)
 {
-    read(&get_static_dispatch(), fun);
+    load(&get_static_dispatch(), fun);
 }
 }
 #if defined(MYGL_REMOVE_APIENTRY)

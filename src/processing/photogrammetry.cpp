@@ -12,6 +12,7 @@ namespace mpp
         _detection_settings.octaves = 4;
         _detection_settings.feature_scales = 3;
         _detection_settings.orientation_magnitude_threshold = 0.0002f;
+        _detection_settings.orientation_slices = 18;
 
         _match_settings.relation_threshold = 0.8f;
         _match_settings.similarity_threshold = 0.83f;

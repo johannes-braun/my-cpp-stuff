@@ -14,7 +14,7 @@ namespace mpp
 
     void opengl_environment::on_start(program_state& state) 
     {
-        mygl::read(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
+        mygl::load(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
         ImGui_ImplOpenGL3_Init();
 
         spdlog::info("OpenGL Environment");

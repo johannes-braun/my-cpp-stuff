@@ -261,14 +261,14 @@ namespace mpp::sift {
             float nom = exp(-(inner * inner / 2));
             return nom / (sigma * sqrt_2_pi);
         }
-
         template<typename Fun>
         void compute_orientations(detail::sift_state & state, const detection_settings & settings, const std::vector<imgf> & gaussian_images, int x, int y, int octave, int scale, Fun && publish_orientation)
         {
             const auto& img = gaussian_images[octave * state.difference_of_gaussian_textures.size() + scale];
             const glm::ivec2 px(x >> octave, y >> octave);
             const glm::ivec2 tsize(img.w, img.h);
-            constexpr int window_size_half = 5;
+            constexpr int window_size_half = 4;
+            constexpr int window_width = window_size_half + window_size_half + 1;
 
             // Discard features where the window does not fit inside the image.
             if (px.x - window_size_half <= 0 || px.x + window_size_half >= tsize.x - 1 || px.y - window_size_half <= 0 || px.y + window_size_half > tsize.y - 1)
@@ -278,6 +278,8 @@ namespace mpp::sift {
             // Then compute a gaussian- and magnitude-weighted orientation histogram.
             std::vector<float> angles;
             std::vector<glm::vec2> vectors;
+            angles.reserve(window_width * window_width);
+            vectors.reserve(window_width * window_width);
             for (int win_y = -window_size_half; win_y <= window_size_half; ++win_y)
             {
                 for (int win_x = -window_size_half; win_x <= window_size_half; ++win_x)
@@ -443,9 +445,7 @@ namespace mpp::sift {
         glEndQuery(GL_SAMPLES_PASSED);
         std::uint32_t samples_passed = 0;
         glGetQueryObjectuiv(count_query, GL_QUERY_RESULT, &samples_passed);
-        spdlog::info("Potential Feature Candidates: {}", samples_passed);
         glDeleteQueries(1, &count_query);
-
 
         // STEP 4: Filter features to exclude outliers and to improve accuracy
         filter_features(state, base_width, base_height);
@@ -495,8 +495,8 @@ namespace mpp::sift {
             glUniform1i(state.transform_feedback_reduce.u_mip_location, octave);
             for (int scale = 0; scale < state.feature_textures.size(); ++scale)
             {
-                glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, state.transform_feedback_buffer, tf_buf_offset * sizeof(tf_feature), (samples_passed - tf_buf_offset) * sizeof(tf_feature));
-
+                glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, state.transform_feedback_buffer,
+                    tf_buf_offset * sizeof(tf_feature), (samples_passed - tf_buf_offset) * sizeof(tf_feature));
                 glBindTexture(GL_TEXTURE_2D, state.feature_textures[scale]);
                 glBindVertexArray(state.empty_vao);
                 glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, tf_query);
@@ -528,12 +528,18 @@ namespace mpp::sift {
                 const auto& tfeat = tf_data[j * stride + i];
                 // Conditional. Calls the lambda only if orientation magnitude is greater than the threshold.
                 compute_orientations(state, settings, gaussians, int(round(tfeat.feat.x)), int(round(tfeat.feat.y)), tfeat.octave, int(round(tfeat.feat.z)), [&](float orientation) {
-                    auto& ft = fvec.emplace_back(feature{ float(tfeat.feat.x), float(tfeat.feat.y), float(tfeat.feat.z), float(tfeat.feat.w), orientation, tfeat.octave });
-                    build_feature_descriptor(state, gaussians[ft.octave * settings.feature_scales + size_t(std::round(ft.sigma))], ft.octave, size_t(std::round(ft.sigma)), ft);
+                    fvec.emplace_back(feature{ float(tfeat.feat.x), float(tfeat.feat.y), float(tfeat.feat.z), float(tfeat.feat.w), orientation, tfeat.octave });
                     });
             }
             });
-        plog.step("Compute principal feature orientations and build descriptors");
+        plog.step("Compute principal feature orientations");
+
+        for_n(std::execution::par_unseq, stride, [&](int i) {
+            auto& fvec = future_vectors[i];
+            for (auto& ft : fvec)
+                build_feature_descriptor(state, gaussians[ft.octave * settings.feature_scales + size_t(std::round(ft.sigma))], ft.octave, size_t(std::round(ft.sigma)), ft);
+            });
+        plog.step("Build descriptors");
 
         // Merge multithreaded results
         std::vector<feature> all_feature_points;
