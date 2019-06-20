@@ -27,7 +27,7 @@ namespace mpp
         photogrammetry_processor_async _photogrammetry;
         glm::dvec2 _last_curpos;
         camera _camera;
-        int _imgs_to_load;
-        std::atomic_int _img_counter;
+        int _imgs_to_load = 0;
+        std::atomic_int _img_counter = 0;
     };
 }

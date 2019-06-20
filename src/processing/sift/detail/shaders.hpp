@@ -214,6 +214,7 @@ void main()
 }
 )";
     constexpr auto transform_feedback_reduce_geom = R"(#version 330 core
+#extension GL_EXT_geometry_shader : enable
 layout(points) in;
 layout (points, max_vertices = 1) out;
 flat in vec4 vs_pos[];

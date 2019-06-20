@@ -4,6 +4,9 @@
 #include <spdlog/spdlog.h>
 #include <Eigen/Eigen>
 #include <execution>
+#include <opengl/mygl_glfw.hpp>
+#include <future>
+#include <spdlog/spdlog.h>
 
 namespace mpp
 {
@@ -140,4 +143,118 @@ namespace mpp
             });
         return imgs;
     }
+    void photogrammetry_processor_async::run()
+    {
+        std::promise<void> p;
+        const auto fut = p.get_future();
+        _worker = std::thread([this, prom = std::move(p)]() mutable {
+            std::unique_lock<std::mutex> lock(_proc_mtx);
+            glfwDefaultWindowHints();
+            glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+            //glfwWindowHint(GLFW_VISIBLE, false);
+            const auto w = glfwCreateWindow(1, 1, "_", nullptr, nullptr);
+            glfwMakeContextCurrent(w);
+            glfwHideWindow(w);
+            mygl::load(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
+
+            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            glDebugMessageCallback([](GLenum source, GLenum type, std::uint32_t id, GLenum severity, std::int32_t length, const char* message, const void* userParam) {
+                switch (type)
+                {
+                case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+                    spdlog::warn("OpenGL Deprecated: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_ERROR:
+                    spdlog::error("OpenGL Error: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_MARKER:
+                    spdlog::info("OpenGL Marker: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_OTHER:
+                    spdlog::debug("OpenGL Other: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_PERFORMANCE:
+                    spdlog::warn("OpenGL Performance: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+                    spdlog::warn("OpenGL Undefined Behavior: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_PORTABILITY:
+                    spdlog::warn("OpenGL Portability: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_PUSH_GROUP:
+                    spdlog::debug("OpenGL Push Group: {}", message);
+                    break;
+                case GL_DEBUG_TYPE_POP_GROUP:
+                    spdlog::debug("OpenGL Push Group: {}", message);
+                    break;
+                }
+                }, nullptr);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_LOW, 0, nullptr, GL_FALSE);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM, 0, nullptr, GL_TRUE);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0, nullptr, GL_TRUE);
+
+            _processor = std::make_unique<photogrammetry_processor>();
+            prom.set_value();
+            while (!_quit)
+            {
+                for (auto& i : std::exchange(_work_items, {}))
+                    i();
+                while (_work_items.empty() && !_quit) {  // loop to avoid spurious wakeups
+                    _proc_wakeup.wait(lock);
+                }
+            }
+            _processor.reset();
+
+            glfwDestroyWindow(w);
+        });
+
+        fut.wait();
+    }
+    photogrammetry_processor_async::~photogrammetry_processor_async()
+    {
+        _quit = true;
+        _proc_wakeup.notify_one();
+        if (_worker.joinable())
+            _worker.join();
+    }
+    void photogrammetry_processor_async::clear()
+    {
+        std::unique_lock<std::mutex> lock(_proc_mtx);
+        _work_items.emplace_back([this] {
+            _processor->clear();
+            });
+        _proc_wakeup.notify_one();
+    }
+    void photogrammetry_processor_async::add_image(std::shared_ptr<image> img, float focal_length, std::function<void()> on_finish)
+    {
+        _enqueued.emplace_back(img, focal_length, on_finish);
+    }
+    void photogrammetry_processor_async::detect_all()
+    {
+        std::unique_lock<std::mutex> lock(_proc_mtx);
+        _work_items.emplace_back([this, elem = std::exchange(_enqueued, {})]{
+            for (auto const& it : elem)
+            {
+                _processor->add_image(std::get < std::shared_ptr<image>>(it), std::get<float>(it));
+                std::get<std::function<void()>>(it)();
+            }
+            });
+        _proc_wakeup.notify_one();
+    }
+    void photogrammetry_processor_async::match_all()
+    {
+        std::unique_lock<std::mutex> lock(_proc_mtx);
+        _work_items.emplace_back([this] {
+            _processor->match_all();
+            });
+        _proc_wakeup.notify_one();
+    }
+    photogrammetry_processor& photogrammetry_processor_async::base_processor() { return *_processor; }
+    const photogrammetry_processor& photogrammetry_processor_async::base_processor() const { return *_processor; }
 }

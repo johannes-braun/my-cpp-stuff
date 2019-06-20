@@ -12,7 +12,6 @@
 #include <processing/epipolar.hpp>
 #include <random>
 #include <processing/photogrammetry.hpp>
-#include <tinyfd/fd.hpp>
 
 namespace mpp
 {
@@ -181,7 +180,7 @@ void main()
         auto matches12 = sift::match_features(features[0], features[1], settings);
         auto pts = sift::corresponding_points(matches12);
         glm::mat3 best_mat = ransac_fundamental(pts);
-     /*   spdlog::info("Fundamental matrix: {}", glm::to_string(best_mat));
+        spdlog::info("Fundamental matrix: {}", glm::to_string(best_mat));
         for (int i = 0; i < pts.size(); ++i)
         {
             auto a = glm::vec3(pts[i].first, 1);
@@ -191,7 +190,7 @@ void main()
             spdlog::info("  B = {}", to_string(b));
             spdlog::info("  F = {}", to_string(best_mat));
             spdlog::info("  B^T * F * A = {}", dot(b, best_mat * a));
-        }*/
+        }
 
         for (int i = 0; i < matches12.size(); ++i)
         {
@@ -278,14 +277,6 @@ void main()
             ImGui::DragInt("Matches", &num_matches, 0.01f, -1, ref.size());
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
             ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1 - cy / fy) * 2.f - 1.f);
-
-            if (ImGui::Button("Open..."))
-            {
-                for (auto& f : open_files("Whatever"))
-                {
-                    spdlog::info("{}", f.string());
-                }
-            }
 
         }
         ImGui::End();

@@ -21,7 +21,7 @@ namespace mpp
     }
     void cameras_impl::on_start(program_state& state) {
         glClearColor(0.5f, 0.5f, 0.5f, 1.f);
-
+        _photogrammetry.run();
         _camera.set_axis_smoothing(0.7f);
         _camera.set_rotate_smoothing(0.7f);
         _camera.set_position(glm::vec3(3, 3, 3));

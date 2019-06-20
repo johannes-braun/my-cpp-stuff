@@ -402,10 +402,14 @@ namespace mpp::sift {
         auto& state = cache.state;
         state.resize(img.dimensions().x, img.dimensions().y);
 
+        std::vector<float> imgf_data(img.dimensions().x * img.dimensions().y * img.components());
+        float* ins = imgf_data.data();
+        for (auto it = img.data(); it < img.data() + img.size(); ++it, ++ins)
+            * ins = float(*it) / 255.f;
         // Fill temp[0] with original image
         glBindTexture(GL_TEXTURE_2D, state.temporary_textures[0]);
         constexpr std::array<GLenum, 4> gl_components{ GL_RED, GL_RG, GL_RGB, GL_RGBA };
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.dimensions().x, img.dimensions().y, gl_components[img.components() - 1], GL_UNSIGNED_BYTE, img.data());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.dimensions().x, img.dimensions().y, gl_components[img.components() - 1], GL_FLOAT, imgf_data.data());
 
         plog.step("Initialize prerequisites");
 
@@ -436,16 +440,17 @@ namespace mpp::sift {
         }
         plog.step("Generate Difference-of-Gaussian images (only the full-size ones)");
 
-        std::uint32_t count_query;
-        glGenQueries(1, &count_query);
-        glBeginQuery(GL_SAMPLES_PASSED, count_query);
+        //std::uint32_t count_query;
+        //glGenQueries(1, &count_query);
+        //glBeginQuery(GL_ANY_SAMPLES_PASSED, count_query);
         // STEP 3: Detect feature candidates by testing for extrema
         detect_candidates(state, base_width, base_height);
         plog.step("Detect feature candidates by testing for extrema");
-        glEndQuery(GL_SAMPLES_PASSED);
-        std::uint32_t samples_passed = 0;
-        glGetQueryObjectuiv(count_query, GL_QUERY_RESULT, &samples_passed);
-        glDeleteQueries(1, &count_query);
+        //glEndQuery(GL_ANY_SAMPLES_PASSED);
+        constexpr auto max_features = 1u << 14;
+        std::uint32_t samples_passed = max_features;
+        //glGetQueryObjectuiv(count_query, GL_QUERY_RESULT, &samples_passed);
+        //glDeleteQueries(1, &count_query);
 
         // STEP 4: Filter features to exclude outliers and to improve accuracy
         filter_features(state, base_width, base_height);
@@ -481,7 +486,7 @@ namespace mpp::sift {
         int buffer_size;
         glGetBufferParameteriv(GL_TRANSFORM_FEEDBACK_BUFFER, GL_BUFFER_SIZE, &buffer_size);
         if (buffer_size < samples_passed * sizeof(tf_feature))
-            glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, samples_passed * sizeof(tf_feature), nullptr, GL_STATIC_READ);
+            glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, samples_passed * sizeof(tf_feature), nullptr, GL_DYNAMIC_COPY);
 
         glUseProgram(state.transform_feedback_reduce.program);
         glUniform1i(state.transform_feedback_reduce.u_texture_location, 0);
@@ -511,8 +516,9 @@ namespace mpp::sift {
         }
         glDeleteQueries(1, &tf_query);
         glDisable(GL_RASTERIZER_DISCARD);
-        std::vector<tf_feature> tf_data(tf_buf_offset);
-        glGetBufferSubData(GL_TRANSFORM_FEEDBACK_BUFFER, 0, tf_buf_offset * sizeof(tf_feature), tf_data.data());
+        auto d = static_cast<const tf_feature*>(glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, tf_buf_offset * sizeof(tf_feature), GL_MAP_READ_BIT));
+        std::vector<tf_feature> tf_data(d, d + tf_buf_offset);
+        glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
         plog.step("Transform feedback feature reduction");
 
         // STEP 5: Compute main orientations at the feature points

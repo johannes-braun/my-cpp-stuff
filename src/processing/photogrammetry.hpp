@@ -1,21 +1,15 @@
 #pragma once
 #include <processing/image.hpp>
+#include <processing/sift/sift.hpp>
+#include <glm/glm.hpp>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
 #include <optional>
-#include <glm/glm.hpp>
-#include <processing/sift/sift.hpp>
 #include <mutex>
 #include <thread>
 #include <queue>
 #include <atomic>
-#include <opengl/mygl_glfw.hpp>
-
-namespace mpp::sift
-{
-    struct sift_cache;
-}
 
 namespace mpp
 {
@@ -104,73 +98,16 @@ namespace mpp
     class photogrammetry_processor_async
     {
     public:
-        photogrammetry_processor_async()
-        {
-            _worker = std::thread([this] {
-                std::unique_lock<std::mutex> lock(_proc_mtx);
-                glfwDefaultWindowHints();
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-                //glfwWindowHint(GLFW_VISIBLE, false);
-                const auto w = glfwCreateWindow(1, 1, "_", nullptr, nullptr);
-                glfwMakeContextCurrent(w);
-                glfwHideWindow(w);
-                mygl::load(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
+        photogrammetry_processor_async() = default;
 
-                _processor = std::make_unique<photogrammetry_processor>();
-                while (!_quit)
-                {
-                    while (_work_items.empty()) {  // loop to avoid spurious wakeups
-                        _proc_wakeup.wait(lock);
-                    }
-                    for (auto& i : std::exchange(_work_items, {}))
-                        i();
-                }
-
-                glfwDestroyWindow(w);
-                });
-        }
-        ~photogrammetry_processor_async()
-        {
-            _quit = true;
-            if (_worker.joinable())
-                _worker.join();
-        }
-        void clear()
-        {
-            std::unique_lock<std::mutex> lock(_proc_mtx);
-            _work_items.emplace_back([this] {
-                _processor->clear();
-                });
-            _proc_wakeup.notify_one();
-        }
-        void add_image(std::shared_ptr<image> img, float focal_length, std::function<void()> on_finish)
-        {
-            _enqueued.emplace_back(img, focal_length, on_finish);
-        }
-        void detect_all()
-        {
-            std::unique_lock<std::mutex> lock(_proc_mtx);
-            _work_items.emplace_back([this, elem = std::exchange(_enqueued, {})]{
-                for (auto const& it : elem)
-                {
-                    _processor->add_image(std::get < std::shared_ptr<image>>(it), std::get<float>(it));
-                    std::get<std::function<void()>>(it)();
-                }
-                });
-            _proc_wakeup.notify_one();
-        }
-        void match_all()
-        {
-            std::unique_lock<std::mutex> lock(_proc_mtx);
-            _work_items.emplace_back([this] {
-                _processor->match_all();
-                });
-            _proc_wakeup.notify_one();
-        }
-
-        photogrammetry_processor& base_processor() { return *_processor; }
-        const photogrammetry_processor& base_processor() const { return *_processor; }
+        void run();
+        ~photogrammetry_processor_async();
+        void clear();
+        void add_image(std::shared_ptr<image> img, float focal_length, std::function<void()> on_finish);
+        void detect_all();
+        void match_all();
+        photogrammetry_processor& base_processor();
+        const photogrammetry_processor& base_processor() const;
 
     private:
         std::vector<std::tuple<std::shared_ptr<image>, float, std::function<void()>>> _enqueued;
