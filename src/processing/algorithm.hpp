@@ -1,6 +1,17 @@
 #pragma once
 #include <algorithm>
+
+#if __has_include(<execution>)
 #include <execution>
+#define MPP_PAR_UNSEQ_FOR_RANGE(IBeg, IEnd, Fun) std::for_each(std::execution::par_unseq, detail::count_iter<decltype(IBeg)>(IBeg), detail::count_iter<decltype(IEnd)>(IEnd), Fun);
+#elif defined(_OPENMP)
+#if _MSC_VER
+#define INLINE_PRAGMA(x) __pragma(x)
+#else
+#define INLINE_PRAGMA(x) _Pragma(x)
+#endif
+#define MPP_PAR_UNSEQ_FOR_RANGE(IBeg, IEnd, Fun) { using ty = long long; INLINE_PRAGMA("omp parallel for schedule(dynamic)") for(ty i = ty(IBeg); i < ty(IEnd); ++i) Fun(decltype(IBeg)(i)); }
+#endif
 
 namespace mpp
 {
@@ -38,17 +49,25 @@ namespace mpp
         };
     }
 
-    template<typename Int, typename Policy, typename Fun>
-    void for_n(Policy policy, Int n, Fun&& fun)
+    template<typename Int, typename Fun>
+    void for_n(Int n, Fun&& fun)
     {
         static_assert(std::is_integral_v<Int>, "Given value is not an integral type.");
-        std::for_each(policy, detail::count_iter(Int(0)), detail::count_iter(n), std::forward<Fun>(fun));
+        MPP_PAR_UNSEQ_FOR_RANGE(Int(0), n, std::forward<Fun>(fun));
     }
 
-    template<typename Int, typename Policy, typename Fun>
-    void for_range(Policy policy, Int begin, Int end, Fun&& fun)
+    template<typename Int, typename Fun>
+    void for_range(Int begin, Int end, Fun&& fun)
     {
         static_assert(std::is_integral_v<Int>, "Given value is not an integral type.");
-        std::for_each(policy, detail::count_iter(begin), detail::count_iter(end), std::forward<Fun>(fun));
+        MPP_PAR_UNSEQ_FOR_RANGE(begin, end, std::forward<Fun>(fun));
     }
 }
+
+#ifdef MPP_PAR_UNSEQ_FOR_RANGE
+#undef MPP_PAR_UNSEQ_FOR_RANGE
+#endif // MPP_PAR_UNSEQ_FOR_RANGE
+
+#ifdef INLINE_PRAGMA
+#undef INLINE_PRAGMA
+#endif // INLINE_PRAGMA

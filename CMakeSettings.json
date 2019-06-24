@@ -12,9 +12,7 @@
             "name": "x64-Debug",
             "generator": "Ninja",
             "configurationType": "Debug",
-            "inheritEnvironments": [
-                "msvc_x64_x64"
-            ],
+            "inheritEnvironments": [ "msvc_x64_x64" ],
             "buildRoot": "${env.BUILD_ROOT}",
             "installRoot": "${env.INSTALL_ROOT}",
             "cmakeCommandArgs": "",
@@ -23,11 +21,13 @@
             "variables": [
                 {
                     "name": "CMAKE_TOOLCHAIN_FILE",
-                    "value": "${env.TOOLCHAIN_FILE}"
+                    "value": "${env.TOOLCHAIN_FILE}",
+                    "type": "STRING"
                 },
                 {
                     "name": "VCPKG_TARGET_TRIPLET",
-                    "value": "${env.VCPKG_TRIPLET_X64}"
+                    "value": "${env.VCPKG_TRIPLET_X64}",
+                    "type": "STRING"
                 }
             ]
         },
@@ -35,9 +35,7 @@
             "name": "x64-RelWithDebInfo",
             "generator": "Ninja",
             "configurationType": "RelWithDebInfo",
-            "inheritEnvironments": [
-                "msvc_x64_x64"
-            ],
+            "inheritEnvironments": [ "msvc_x64_x64" ],
             "buildRoot": "${env.BUILD_ROOT}",
             "installRoot": "${env.INSTALL_ROOT}",
             "cmakeCommandArgs": "",
@@ -46,11 +44,13 @@
             "variables": [
                 {
                     "name": "CMAKE_TOOLCHAIN_FILE",
-                    "value": "${env.TOOLCHAIN_FILE}"
+                    "value": "${env.TOOLCHAIN_FILE}",
+                    "type": "STRING"
                 },
                 {
                     "name": "VCPKG_TARGET_TRIPLET",
-                    "value": "${env.VCPKG_TRIPLET_X64}"
+                    "value": "${env.VCPKG_TRIPLET_X64}",
+                    "type": "STRING"
                 }
             ]
         }

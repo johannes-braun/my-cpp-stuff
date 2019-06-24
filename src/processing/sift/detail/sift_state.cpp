@@ -4,6 +4,7 @@
 #include <opengl/mygl.hpp>
 #include <string>
 #include <spdlog/spdlog.h>
+#include "sift_state.hpp"
 
 namespace mpp::sift::detail
 {
@@ -49,18 +50,19 @@ namespace mpp::sift::detail
         return tex;
     }
 
-    void resize_textures(const std::vector<std::uint32_t>& tex, int width, int height, GLenum format, GLenum comp, GLenum ty, bool gen_mipmap)
+    void resize_textures(std::vector<std::uint32_t>& tex, int width, int height, GLenum format, int mips)
     {
-        for (auto id : tex)
+        for (auto& id : tex)
         {
+            if (glIsTexture(id))
+                glDeleteTextures(1, &id);
+            glGenTextures(1, &id);
             glBindTexture(GL_TEXTURE_2D, id);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, comp, ty, nullptr);
-            if (gen_mipmap)
-                glGenerateMipmap(GL_TEXTURE_2D);
+            glTexStorage2D(GL_TEXTURE_2D, mips, format, width, height);
         }
     }
 
@@ -136,15 +138,20 @@ namespace mpp::sift::detail
         {
             const auto reduction_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::transform_feedback_reduce_geom);
             const auto reduction_vs = create_shader(GL_VERTEX_SHADER, shader_source::transform_feedback_reduce_vert);
-            const auto reduction_fs = create_shader(GL_FRAGMENT_SHADER, "#version 330 core\nvoid main(){}");
+            const auto reduction_fs = create_shader(GL_FRAGMENT_SHADER, "#version 320 es\n"
+                "#if GL_ES\n"
+                "precision highp float;\n"
+                "#endif\n"
+                "void main(){ }");
 
             transform_feedback_reduce.program = glCreateProgram();
-            glAttachShader(transform_feedback_reduce.program, reduction_gs);
-            glAttachShader(transform_feedback_reduce.program, reduction_vs);
-            glAttachShader(transform_feedback_reduce.program, reduction_fs);
 
-            constexpr const char* tf_out_names[3]{ "feature_values", "octave", "gl_SkipComponents3" };
+            constexpr const char* tf_out_names[3]{ "feature_values", "octave", "skip_c" };
             glTransformFeedbackVaryings(transform_feedback_reduce.program, int(std::size(tf_out_names)), std::data(tf_out_names), GL_INTERLEAVED_ATTRIBS);
+
+            glAttachShader(transform_feedback_reduce.program, reduction_vs);
+            glAttachShader(transform_feedback_reduce.program, reduction_gs);
+            glAttachShader(transform_feedback_reduce.program, reduction_fs);
             glLinkProgram(transform_feedback_reduce.program);
             int log_len;
             glGetProgramiv(transform_feedback_reduce.program, GL_INFO_LOG_LENGTH, &log_len);
@@ -154,8 +161,8 @@ namespace mpp::sift::detail
                 glGetProgramInfoLog(transform_feedback_reduce.program, log_len, &log_len, info_log.data());
                 spdlog::info("Shader Compilation Output:\n{}", info_log);
             }
-            glDetachShader(transform_feedback_reduce.program, reduction_gs);
             glDetachShader(transform_feedback_reduce.program, reduction_vs);
+            glDetachShader(transform_feedback_reduce.program, reduction_gs);
             glDetachShader(transform_feedback_reduce.program, reduction_fs);
 
             glDeleteShader(reduction_gs);
@@ -175,11 +182,11 @@ namespace mpp::sift::detail
     }
     void sift_state::resize(int width, int height)
     {
-        resize_textures(temporary_textures, width, height, GL_R32F, GL_RED, GL_FLOAT, false);
-        resize_textures(gaussian_textures, width, height, GL_R32F, GL_RED, GL_FLOAT, false);
-        resize_textures(difference_of_gaussian_textures, width, height, GL_R32F, GL_RED, GL_FLOAT, false);
-        resize_textures(feature_textures, width, height, GL_RGBA32F, GL_RGBA, GL_FLOAT, true);
-        resize_textures(orientation_textures, width, height, GL_R32F, GL_RED, GL_FLOAT, true);
+        resize_textures(temporary_textures, width, height, GL_R32F, int(num_octaves));
+        resize_textures(gaussian_textures, width, height, GL_R32F, int(num_octaves));
+        resize_textures(difference_of_gaussian_textures, width, height, GL_R32F, int(num_octaves));
+        resize_textures(feature_textures, width, height, GL_RGBA32F, int(num_octaves));
+        resize_textures(orientation_textures, width, height, GL_R32F, int(num_octaves));
 
         for (int oct = 0; oct < num_octaves; ++oct)
         {

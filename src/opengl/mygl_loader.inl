@@ -25,67 +25,13 @@ namespace {
 
         }
 
-        function_loader()
-        {
-            for (size_t i = 0; i < std::size(libs); ++i) {
-    #ifdef _WIN32
-                hnd = LoadLibraryA(libs[i]);
-    #else
-                hnd = dlopen(libs[i], RTLD_LAZY | RTLD_GLOBAL);
-    #endif
-                if (hnd != nullptr)
-                    break;
-            }
-
-    #ifdef __APPLE__
-            get_fun = nullptr;
-    #elif defined _WIN32
-            get_fun = reinterpret_cast<decltype(get_fun)>(get_handle(hnd, "wglGetProcAddress"));
-    #else
-            get_fun = reinterpret_cast<decltype(get_fun)>(get_handle(hnd, "glXGetProcAddressARB"));
-    #endif
-        }
-
         void* get(const char* name)
         {
-            void* addr = get_fun ? get_fun(name) : nullptr;
-            return addr ? addr : get_handle(hnd, name);
+            return get_fun(name);
         }
 
     private:
-        void *hnd;
-
-        void* get_handle(void* handle, const char* name)
-        {
-    #if defined _WIN32
-            return static_cast<void*>(GetProcAddress(static_cast<HMODULE>(handle), name));
-    #else
-            return dlsym(handle, name);
-    #endif
-        }
-
         void* (APIENTRY *get_fun)(const char*) = nullptr;
-
-    #ifdef __APPLE__
-        constexpr static std::array<const char *, 4> libs = {
-            "../Frameworks/OpenGL.framework/OpenGL",
-            "/Library/Frameworks/OpenGL.framework/OpenGL",
-            "/System/Library/Frameworks/OpenGL.framework/OpenGL",
-            "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL"
-        };
-    #elif defined _WIN32
-        constexpr static std::array<const char *, 2> libs = { "opengl32.dll" };
-    #else
-    #if defined __CYGWIN__
-        constexpr static std::array<const char *, 3> libs = {
-            "libGL-1.so",
-    #else
-        constexpr static std::array<const char *, 2> libs = {
-    #endif
-            "libGL.so.1",
-            "libGL.so"
-        };
-    #endif
     };
 
     void load_impl(MYGL_DISPATCH_NAME* d, function_loader& loader) {
@@ -1049,21 +995,10 @@ namespace {
     }
 }
 
-void load(MYGL_DISPATCH_NAME* d)
-{
-    function_loader loader;
-    load_impl(d, loader);
-}
-
 void load(MYGL_DISPATCH_NAME* d, loader_function fun)
 {
     function_loader loader(fun);
     load_impl(d, loader);
-}
-
-void load()
-{
-    load(&get_static_dispatch());
 }
 
 void load(loader_function fun)

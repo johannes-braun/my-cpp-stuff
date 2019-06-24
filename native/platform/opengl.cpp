@@ -1,9 +1,9 @@
 #include <platform/opengl.hpp>
-#include <opengl/mygl_glfw.hpp>
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_opengl3.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
+#include <opengl/mygl_glfw.hpp>
 
 namespace mpp
 {

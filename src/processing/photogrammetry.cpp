@@ -3,10 +3,14 @@
 #include <processing/image.hpp>
 #include <spdlog/spdlog.h>
 #include <Eigen/Eigen>
-#include <execution>
 #include <opengl/mygl_glfw.hpp>
 #include <future>
 #include <spdlog/spdlog.h>
+
+#ifdef __ANDROID__
+#include <EGL/egl.h>
+#include <spdlog/sinks/android_sink.h>
+#endif
 
 namespace mpp
 {
@@ -28,15 +32,15 @@ namespace mpp
     }
     void photogrammetry_processor::add_image(std::shared_ptr<image> img, float focal_length)
     {
-        if(!_sift_cache)
+        if (!_sift_cache)
             _sift_cache = sift::create_cache(_detection_settings.octaves, _detection_settings.feature_scales);
 
         const auto [insert_iter, did_emplace] = _images.emplace(std::move(img), image_info{});
         constexpr auto max_width = 400;
         auto& imgref = *insert_iter->first;
-        const float aspect = imgref.dimensions().x / imgref.dimensions().y;
+        const float aspect = float(imgref.dimensions().x) / imgref.dimensions().y;
         const auto w = max_width;
-        const auto h = aspect * max_width;
+        const auto h = int(aspect * max_width);
         if (did_emplace)
         {
             insert_iter->second.feature_points = sift::detect_features(*_sift_cache, image(imgref).resize(w, h), _detection_settings, sift::dst_system::normalized_coordinates);
@@ -51,7 +55,7 @@ namespace mpp
         for (auto& i : _images)
             _image_matches[i.first];
 
-        std::for_each(std::execution::par, _images.begin(), _images.end(), [&](const std::pair<std::shared_ptr<image>, image_info>& a) {
+        std::for_each(_images.begin(), _images.end(), [&](const std::pair<std::shared_ptr<image>, image_info>& a) {
             std::for_each(std::next(_images.find(a.first)), _images.end(), [&](const std::pair<std::shared_ptr<image>, image_info>& b) {
                 const auto matches = sift::match_features(a.second.feature_points, b.second.feature_points, _match_settings);
                 spdlog::info("{} matches.", matches.size());
@@ -149,6 +153,41 @@ namespace mpp
         const auto fut = p.get_future();
         _worker = std::thread([this, prom = std::move(p)]() mutable {
             std::unique_lock<std::mutex> lock(_proc_mtx);
+
+#ifdef __ANDROID__
+            EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+            int vmaj, vmin;
+            eglInitialize(display, &vmaj, &vmin);
+            // Step 3 - Make OpenGL ES the current API.
+            eglBindAPI(EGL_OPENGL_ES_API);
+
+            const EGLint attrib_list[] = {
+                // this specifically requests an Open GL ES 2 renderer
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                // (ommiting other configs regarding the color channels etc...
+                EGL_NONE
+            };
+
+            EGLConfig config;
+            EGLint num_configs;
+            eglChooseConfig(display, attrib_list, &config, 1, &num_configs);
+
+            // ommiting other codes
+
+            const EGLint context_attrib_list[] = {
+                // request a context using Open GL ES 2.0
+                EGL_CONTEXT_CLIENT_VERSION, 3,
+                EGL_NONE
+            };
+            EGLContext context = eglCreateContext(display, config, NULL, context_attrib_list);
+
+            // Step 8 - Bind the context to the current thread
+            eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+            mygl::load(reinterpret_cast<mygl::loader_function>(eglGetProcAddress));
+            std::string tag = "spdlog-android";
+            auto android_logger = spdlog::android_logger_mt("android", tag);
+            spdlog::set_default_logger(android_logger);
+#else
             glfwDefaultWindowHints();
             glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
             glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
@@ -159,6 +198,7 @@ namespace mpp
             glfwMakeContextCurrent(w);
             glfwHideWindow(w);
             mygl::load(reinterpret_cast<mygl::loader_function>(glfwGetProcAddress));
+#endif
 
             glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
             glDebugMessageCallback([](GLenum source, GLenum type, std::uint32_t id, GLenum severity, std::int32_t length, const char* message, const void* userParam) {
@@ -211,7 +251,11 @@ namespace mpp
             }
             _processor.reset();
 
+#ifdef __ANDROID__
+            eglDestroyContext(display, context);
+#else
             glfwDestroyWindow(w);
+#endif
         });
 
         fut.wait();

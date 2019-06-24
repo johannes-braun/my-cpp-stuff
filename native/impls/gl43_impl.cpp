@@ -3,7 +3,6 @@
 #include <processing/image.hpp>
 #include <fstream>
 #include <string>
-#include <opengl/mygl_glfw.hpp>
 #include <imgui/imgui.h>
 #include <platform/opengl.hpp>
 #include <map>
@@ -12,6 +11,7 @@
 #include <processing/epipolar.hpp>
 #include <random>
 #include <processing/photogrammetry.hpp>
+#include <opengl/mygl_glfw.hpp>
 
 namespace mpp
 {
@@ -221,12 +221,12 @@ void main()
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
         glPointSize(point_size);
         glBufferData(GL_ARRAY_BUFFER, features[0].size() * sizeof(sift::feature), features[0].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_POINTS, 0, features[0].size());
+        glDrawArrays(GL_POINTS, 0, int(features[0].size()));
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
         glLineWidth(1.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
         glBufferData(GL_ARRAY_BUFFER, orientation_dbg[0].size() * sizeof(glm::vec2), orientation_dbg[0].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_LINES, 0, orientation_dbg[0].size());
+        glDrawArrays(GL_LINES, 0, int(orientation_dbg[0].size()));
 
         glDisable(GL_DEPTH_TEST);
         glBindVertexArray(empty_vao);
@@ -244,12 +244,12 @@ void main()
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(sift::feature), nullptr);
         glPointSize(point_size);
         glBufferData(GL_ARRAY_BUFFER, features[1].size() * sizeof(sift::feature), features[1].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_POINTS, 0, features[1].size());
+        glDrawArrays(GL_POINTS, 0, int(features[1].size()));
         glBindBuffer(GL_ARRAY_BUFFER, points.ori_vbo);
         glLineWidth(1.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
         glBufferData(GL_ARRAY_BUFFER, orientation_dbg[1].size() * sizeof(glm::vec2), orientation_dbg[1].data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_LINES, 0, orientation_dbg[1].size());
+        glDrawArrays(GL_LINES, 0, int(orientation_dbg[1].size()));
         glViewport(0, 0, fx, fy);
 
         glBindVertexArray(points.vao);
@@ -261,20 +261,20 @@ void main()
         glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(glm::vec2), nullptr);
         glLineWidth(1.f);
         glUniform4f(points.u_color_location, 1.f, 1.f, 1.f, 1.f);
-        glDrawArrays(GL_LINES, 0, (num_matches == -1 ? ref.size() : num_matches) * 2);
+        glDrawArrays(GL_LINES, 0, int(num_matches == -1 ? ref.size() : num_matches) * 2);
         // Draw Match Src Points
         glPointSize(4.f);
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), nullptr);
         glUniform4f(points.u_color_location, 0.1f, 0.5f, 1.f, 1.f);
-        glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
+        glDrawArrays(GL_POINTS, 0, int(num_matches == -1 ? ref.size() : num_matches));
         // Draw Match Dst Points
         glVertexAttribPointer(0, 2, GL_FLOAT, false, 2 * sizeof(glm::vec2), reinterpret_cast<void const*>(sizeof(glm::vec2)));
         glUniform4f(points.u_color_location, 0.4f, 0.7f, 1.f, 1.f);
-        glDrawArrays(GL_POINTS, 0, (num_matches == -1 ? ref.size() : num_matches));
+        glDrawArrays(GL_POINTS, 0, int(num_matches == -1 ? ref.size() : num_matches));
 
         if (ImGui::Begin("Settings"))
         {
-            ImGui::DragInt("Matches", &num_matches, 0.01f, -1, ref.size());
+            ImGui::DragInt("Matches", &num_matches, 0.01f, -1, int(ref.size()));
             ImGui::DragFloat("Point Size", &point_size, 0.01f, 1.f, 100.f);
             ImGui::Text("Cursor at %0.7f, %0.7f", (cx / fx) * 2.f - 1.f, (1 - cy / fy) * 2.f - 1.f);
 
@@ -299,9 +299,9 @@ void main()
         auto& ori = orientation_dbg.emplace_back();
 
         constexpr auto max_width = 400;
-        const float aspect = img.dimensions().x / img.dimensions().y;
+        const float aspect = float(img.dimensions().x) / img.dimensions().y;
         const auto w = max_width;
-        const auto h = aspect * max_width;
+        const auto h = int(aspect * max_width);
         sift::detection_settings settings;
         settings.octaves = 4;
         settings.feature_scales = 3;

@@ -2,15 +2,21 @@
 
 namespace mpp::sift::detail::shader_source
 {
-    constexpr auto screen_vert = R"(#version 330 core
+    constexpr auto screen_vert = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 out vec2 vs_uv;
 void main()
 {
     gl_Position = vec4(mix(-1.f, 3.f, float(gl_VertexID & 0x1)), mix(-1.f, 3.f, float((gl_VertexID >> 1) & 0x1)), 0.f, 1.f);
-    vs_uv = ((gl_Position.xy+1)*0.5f);
+    vs_uv = ((gl_Position.xy+1.0f)*0.5f);
 }
 )";
-    constexpr auto gauss_blur_frag = R"(#version 330 core
+    constexpr auto gauss_blur_frag = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 in vec2 vs_uv;
 uniform int u_mip;
 uniform int u_dir;
@@ -22,7 +28,7 @@ float gaussian(float sigma, float diff)
 {
     const float sqrt_2_pi = 2.50662827463f;
     float inner = diff/sigma;
-    float nom = exp(-(inner * inner / 2));
+    float nom = exp(-(inner * inner / 2.f));
     return nom / (sigma * sqrt_2_pi);
 }
 
@@ -33,11 +39,11 @@ void main()
     vec4 color = gval * texelFetch(in_texture, uv, u_mip);
     ivec2 off = ivec2(0, 0);
     ivec2 tsize = ivec2(textureSize(in_texture, u_mip).xy);
-    for(int i=1; i<int(6*u_sigma); ++i)
+    for(int i=1; i<int(6.f*u_sigma); ++i)
     {
         off[u_dir] = i;
-        ivec2 pos_uv = ivec2(mod(uv + off, tsize));
-        ivec2 neg_uv = ivec2(mod(uv + tsize - off, tsize));
+        ivec2 pos_uv = ivec2(mod(vec2(uv + off), vec2(tsize)));
+        ivec2 neg_uv = ivec2(mod(vec2(uv + tsize - off), vec2(tsize)));
         gval = gaussian(u_sigma, float(i));
         color += gval * (texelFetch(in_texture, pos_uv, u_mip) 
             + texelFetch(in_texture, neg_uv, u_mip));
@@ -45,7 +51,10 @@ void main()
     out_color = color;
 }
 )";
-    constexpr auto difference_frag = R"(#version 330 core
+    constexpr auto difference_frag = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 in vec2 vs_uv;
 uniform sampler2D u_current_tex;
 uniform sampler2D u_previous_tex;
@@ -56,7 +65,10 @@ void main()
     color = abs(texelFetch(u_current_tex, px, 0) - texelFetch(u_previous_tex, px, 0));
 }
 )";
-    constexpr auto filter_frag = R"(#version 330 core
+    constexpr auto filter_frag = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 in vec2 vs_uv;
 uniform sampler2D u_previous_tex;
 uniform sampler2D u_current_tex;
@@ -77,13 +89,15 @@ void main()
 {
     ivec2 px = ivec2(gl_FragCoord.xy);
     tsize = ivec2(textureSize(u_current_tex, u_mip));
-    if(any(lessThan(px, ivec2(u_border))) || any(greaterThan(px, tsize - ivec2(u_border + 1))) || texelFetch(u_feature_tex, px, u_mip).r == 0)
+//#define texelFetch_(T, U, M) (textureLod((T), vec2(U) / vec2(tsize), float(M)))
+#define texelFetch_(T, U, M) (texelFetch(T, U, M))
+    if(any(lessThan(px, ivec2(u_border))) || any(greaterThan(px, tsize - ivec2(u_border + 1))) || texelFetch_(u_feature_tex, px, u_mip).r == 0.f)
     {
         color = vec4(0, 0, 0, 1);
         return;
     }
 
-    float d = texelFetch(u_current_tex, px, u_mip).r;
+    float d = texelFetch_(u_current_tex, px, u_mip).r;
    /* const float threshold = 0.0012f;
     if(d < threshold)
     {
@@ -91,27 +105,27 @@ void main()
         return;
     }*/
 
-    float xval_p = texelFetch(u_current_tex, tcl(px + ivec2(1, 0)), u_mip).r;
-    float xval_n = texelFetch(u_current_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
-    float yval_p = texelFetch(u_current_tex, tcl(px + ivec2(0, 1)), u_mip).r;
-    float yval_n = texelFetch(u_current_tex, tcl(px + ivec2(0, -1)), u_mip).r;
-    float sval_p = texelFetch(u_next_tex, tcl(px), u_mip).r;
-    float sval_n = texelFetch(u_previous_tex, tcl(px), u_mip).r;
+    float xval_p = texelFetch_(u_current_tex, tcl(px + ivec2(1, 0)), u_mip).r;
+    float xval_n = texelFetch_(u_current_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
+    float yval_p = texelFetch_(u_current_tex, tcl(px + ivec2(0, 1)), u_mip).r;
+    float yval_n = texelFetch_(u_current_tex, tcl(px + ivec2(0, -1)), u_mip).r;
+    float sval_p = texelFetch_(u_next_tex, tcl(px), u_mip).r;
+    float sval_n = texelFetch_(u_previous_tex, tcl(px), u_mip).r;
 
-    float xval_p_yval_p = texelFetch(u_current_tex, tcl(px + ivec2(1, 1)), u_mip).r;
-    float xval_p_yval_n = texelFetch(u_current_tex, tcl(px + ivec2(1, -1)), u_mip).r;
-    float xval_n_yval_p = texelFetch(u_current_tex, tcl(px + ivec2(-1, 1)), u_mip).r;
-    float xval_n_yval_n = texelFetch(u_current_tex, tcl(px + ivec2(-1, -1)), u_mip).r;
+    float xval_p_yval_p = texelFetch_(u_current_tex, tcl(px + ivec2(1, 1)), u_mip).r;
+    float xval_p_yval_n = texelFetch_(u_current_tex, tcl(px + ivec2(1, -1)), u_mip).r;
+    float xval_n_yval_p = texelFetch_(u_current_tex, tcl(px + ivec2(-1, 1)), u_mip).r;
+    float xval_n_yval_n = texelFetch_(u_current_tex, tcl(px + ivec2(-1, -1)), u_mip).r;
 
-    float xval_p_sval_p = texelFetch(u_next_tex, tcl(px + ivec2(1, 0)), u_mip).r;
-    float xval_p_sval_n = texelFetch(u_previous_tex, tcl(px + ivec2(1, 0)), u_mip).r;
-    float xval_n_sval_p = texelFetch(u_next_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
-    float xval_n_sval_n = texelFetch(u_previous_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
+    float xval_p_sval_p = texelFetch_(u_next_tex, tcl(px + ivec2(1, 0)), u_mip).r;
+    float xval_p_sval_n = texelFetch_(u_previous_tex, tcl(px + ivec2(1, 0)), u_mip).r;
+    float xval_n_sval_p = texelFetch_(u_next_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
+    float xval_n_sval_n = texelFetch_(u_previous_tex, tcl(px + ivec2(-1, 0)), u_mip).r;
 
-    float sval_p_yval_p = texelFetch(u_next_tex, tcl(px + ivec2(0, 1)), u_mip).r;
-    float sval_p_yval_n = texelFetch(u_next_tex, tcl(px + ivec2(0, -1)), u_mip).r;
-    float sval_n_yval_p = texelFetch(u_previous_tex, tcl(px + ivec2(0, 1)), u_mip).r;
-    float sval_n_yval_n = texelFetch(u_previous_tex, tcl(px + ivec2(0, -1)), u_mip).r;
+    float sval_p_yval_p = texelFetch_(u_next_tex, tcl(px + ivec2(0, 1)), u_mip).r;
+    float sval_p_yval_n = texelFetch_(u_next_tex, tcl(px + ivec2(0, -1)), u_mip).r;
+    float sval_n_yval_p = texelFetch_(u_previous_tex, tcl(px + ivec2(0, 1)), u_mip).r;
+    float sval_n_yval_n = texelFetch_(u_previous_tex, tcl(px + ivec2(0, -1)), u_mip).r;
 
     vec3 gradient = vec3(
         xval_p - xval_n,
@@ -119,11 +133,11 @@ void main()
         sval_p - sval_n
     );
     mat3 hessian;
-    hessian[0][0] = (xval_p + xval_n) - 2 * d;
+    hessian[0][0] = (xval_p + xval_n) - 2.f * d;
     hessian[0][1] = hessian[1][0] = (xval_p_yval_p + xval_n_yval_n - xval_p_yval_n - xval_p_yval_n) / 4.f;
-    hessian[1][1] = (yval_p + yval_n) - 2 * d;
+    hessian[1][1] = (yval_p + yval_n) - 2.f * d;
     hessian[0][2] = hessian[2][0] = (xval_p_sval_p + xval_n_sval_n - xval_p_sval_n - xval_n_sval_p) / 4.f;
-    hessian[2][2] = (sval_p + sval_n) - 2 * d;
+    hessian[2][2] = (sval_p + sval_n) - 2.f * d;
     hessian[1][2] = hessian[2][1] = (sval_p_yval_p + sval_n_yval_n - sval_n_yval_p - sval_p_yval_n) / 4.f;
 
     // if any offset values are greater than 0.5, discard the point.
@@ -141,7 +155,7 @@ void main()
         vec3 start_point = vec3(vec2(px), u_scale);
         vec3 final_point = (start_point + interpolated) * step_size;
 
-        float lobe = float(1 << (u_mip + 1)) * (u_scale + interpolated.z + 1) + 1;
+        float lobe = float(1 << (u_mip + 1)) * (float(u_scale) + interpolated.z + 1.f) + 1.f;
         float scale = 1.2f / 3.f * lobe;
         color = vec4(final_point, scale);
     }
@@ -153,7 +167,10 @@ void main()
 }
 )";
 
-    constexpr auto maximize_frag = R"(#version 330 core
+    constexpr auto maximize_frag = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 in vec2 vs_uv;
 uniform sampler2D u_previous_tex;
 uniform sampler2D u_current_tex;
@@ -169,7 +186,11 @@ void main()
     //float max_val = -1.f/0.f;
     //float min_val = 1.f/0.f;
     ivec2 tsize = ivec2(textureSize(u_current_tex, u_mip).xy);
-    float val_curr = texelFetch(u_current_tex, px, u_mip).r;
+
+//#define texelFetch_(T, U, M) (textureLod((T), vec2(U) / vec2(tsize), float(M)))
+#define texelFetch_(T, U, M) (texelFetch(T, U, M))
+
+    float val_curr = texelFetch_(u_current_tex, px, u_mip).r;
     float cmax_val = -1.f/0.f;
     float cmin_val = 1.f/0.f;
     for(int x = -1; x <= 1; ++x)
@@ -179,9 +200,9 @@ void main()
             if(x == 0 && y == 0)
                 continue;
             ivec2 pos_uv = ivec2(clamp(px + ivec2(x, y), ivec2(0, 0), tsize - 1));
-            float vprev = u_neighbors == 1 ? -(1.f/0.f) : texelFetch(u_previous_tex, pos_uv, u_mip).r;
-            float vcurr = texelFetch(u_current_tex, pos_uv, u_mip).r;
-            float vnext = u_neighbors == -1 ? -(1.f/0.f) : texelFetch(u_next_tex, pos_uv, u_mip).r;
+            float vprev = u_neighbors == 1 ? -(1.f/0.f) : texelFetch_(u_previous_tex, pos_uv, u_mip).r;
+            float vcurr = texelFetch_(u_current_tex, pos_uv, u_mip).r;
+            float vnext = u_neighbors == -1 ? -(1.f/0.f) : texelFetch_(u_next_tex, pos_uv, u_mip).r;
             
             float maxval = max(vprev, max(vcurr, vnext));
             float minval = min(vprev, min(vcurr, vnext));
@@ -195,7 +216,7 @@ void main()
             }
         }
     }
-    
+
     // is extremum
     if(cmax_val < val_curr || cmin_val > val_curr)
         color = vec4(px.x, px.y, u_scale, 1);
@@ -203,24 +224,33 @@ void main()
         discard;
 }
 )";
-    constexpr auto transform_feedback_reduce_vert = R"(#version 330 core
+    constexpr auto transform_feedback_reduce_vert = R"(#version 320 es
+#ifdef GL_ES
+    precision highp float;
+#endif
 uniform sampler2D u_texture;
 uniform int u_mip;
 flat out vec4 vs_pos;
 void main()
 {
     ivec2 ts = ivec2(textureSize(u_texture, u_mip));
+#define texelFetch_(T, U, M) (textureLod((T), vec2(U) / vec2(ts), float(M)))
     vs_pos = texelFetch(u_texture, ivec2(gl_VertexID % ts.x, gl_VertexID / ts.x), u_mip);
 }
 )";
-    constexpr auto transform_feedback_reduce_geom = R"(#version 330 core
+
+    constexpr auto transform_feedback_reduce_geom = R"(#version 320 es
 #extension GL_EXT_geometry_shader : enable
+#ifdef GL_ES
+    precision highp float;
+#endif
 layout(points) in;
 layout (points, max_vertices = 1) out;
 flat in vec4 vs_pos[];
 uniform int u_mip;
 out vec4 feature_values;
 out int octave;
+out vec3 skip_c;
 
 void main()
 {
@@ -228,6 +258,7 @@ void main()
     {
         feature_values = vs_pos[0];
         octave = u_mip;
+        skip_c = vec3(0, 0, 0);
         EmitVertex();
         EndPrimitive();
     }

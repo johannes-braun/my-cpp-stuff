@@ -5,9 +5,7 @@
 #include "mygl_functions.hpp"
 
 namespace mygl { 
-void load();
 void load(loader_function fun);
-void load(MYGL_DISPATCH_NAME* d);
 void load(MYGL_DISPATCH_NAME* d, loader_function fun);
 }
 

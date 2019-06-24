@@ -6,7 +6,7 @@ namespace mpp
 {
     std::optional<std::filesystem::path> open_file(const std::string& title, const std::filesystem::path& default_path, const std::vector<const char*>& filter_patterns, const char* description)
     {
-        const char* path = tinyfd_openFileDialog(title.c_str(), default_path.string().c_str(), filter_patterns.size(), filter_patterns.data(), description, false);
+        const char* path = tinyfd_openFileDialog(title.c_str(), default_path.string().c_str(), int(filter_patterns.size()), filter_patterns.data(), description, false);
         if (path)
             return path;
         return std::nullopt;
@@ -14,7 +14,7 @@ namespace mpp
 
     std::vector<std::filesystem::path> open_files(const std::string& title, const std::filesystem::path& default_path, const std::vector<const char*>& filter_patterns, const char* description)
     {
-        const char* paths = tinyfd_openFileDialog(title.c_str(), default_path.string().c_str(), filter_patterns.size(), filter_patterns.data(), description, true);
+        const char* paths = tinyfd_openFileDialog(title.c_str(), default_path.string().c_str(), int(filter_patterns.size()), filter_patterns.data(), description, true);
 
         std::vector<std::filesystem::path> ret;
         std::istringstream ss(paths);

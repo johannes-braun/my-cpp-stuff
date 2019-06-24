@@ -1,5 +1,4 @@
 #include "cameras_impl.hpp"
-#include <opengl/mygl_glfw.hpp>
 #include <program_state.hpp>
 #include <iostream>
 #include <glm/ext.hpp>
@@ -7,6 +6,7 @@
 #include <tinyfd/fd.hpp>
 #include <spdlog/spdlog.h>
 #include <fstream>
+#include <opengl/mygl_glfw.hpp>
 
 namespace mpp
 {
@@ -27,7 +27,7 @@ namespace mpp
         _camera.set_position(glm::vec3(3, 3, 3));
         _camera.look_at(glm::vec3(0, 0, 0));
     }
-    void cameras_impl::on_update(program_state & state, seconds delta) {
+    void cameras_impl::on_update(program_state& state, seconds delta) {
 
         const auto delta_millis = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(delta);
         const auto gcc = glfwGetCurrentContext();
@@ -41,7 +41,7 @@ namespace mpp
             _camera.input_axis_z(float(glfwGetKey(gcc, GLFW_KEY_W) - glfwGetKey(gcc, GLFW_KEY_S)));
             if (glfwGetKey(gcc, GLFW_KEY_LEFT_CONTROL))
                 _camera.input_speed_factor(0.6f);
-            else if(glfwGetKey(gcc, GLFW_KEY_LEFT_SHIFT))
+            else if (glfwGetKey(gcc, GLFW_KEY_LEFT_SHIFT))
                 _camera.input_speed_factor(9.f);
             else
                 _camera.input_speed_factor(3.f);
@@ -80,21 +80,21 @@ namespace mpp
             {
                 auto ps = open_files("Open Images");
                 _img_counter = 0;
-                _imgs_to_load = ps.size();
+                _imgs_to_load = int(ps.size());
                 for (const auto& path : ps)
                 {
                     emplace_file(path);
                 }
                 _photogrammetry.detect_all();
             }
-            if(_imgs_to_load != 0 && _imgs_to_load != _img_counter.load())
+            if (_imgs_to_load != 0 && _imgs_to_load != _img_counter.load())
                 ImGui::ProgressBar(float(_img_counter.load()) / _imgs_to_load);
 
             ImGui::Spacing();
             ImGui::DragInt("Max. Matches", &_photogrammetry.base_processor().match_settings().max_match_count, 0.01f, 0, 2500);
             ImGui::DragFloat("Relation Thresh.", &_photogrammetry.base_processor().match_settings().relation_threshold, 0.001f, 0.f, 1.f);
             ImGui::DragFloat("Similarity Thresh.", &_photogrammetry.base_processor().match_settings().similarity_threshold, 0.001f, 0.f, 1.f);
-            
+
             if (ImGui::Button("Match", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
             {
                 _photogrammetry.match_all();
@@ -102,7 +102,7 @@ namespace mpp
         }
         ImGui::End();
     }
-    void cameras_impl::on_end(program_state & state) {
+    void cameras_impl::on_end(program_state& state) {
 
     }
     void cameras_impl::emplace_file(const std::filesystem::path& path)

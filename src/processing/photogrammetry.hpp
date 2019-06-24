@@ -31,6 +31,11 @@ namespace mpp
         sift::detection_settings& detection_settings() noexcept { return _detection_settings; }
         sift::match_settings& match_settings() noexcept { return _match_settings; }
 
+        const std::vector<sift::feature>& feature_points(const std::shared_ptr<image>& a)
+        {
+            return _images[a].feature_points;
+        }
+
         std::optional<glm::mat3> fundamental_matrix(const std::shared_ptr<image>& a, const std::shared_ptr<image>& b);
         std::optional<glm::mat3> essential_matrix(const std::shared_ptr<image>& a, const std::shared_ptr<image>& b);
         std::optional<glm::mat4> relative_matrix(const std::shared_ptr<image>& a, const std::shared_ptr<image>& b);

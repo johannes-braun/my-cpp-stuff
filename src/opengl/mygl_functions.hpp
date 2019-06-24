@@ -1929,8 +1929,7 @@ struct MYGL_DISPATCH_NAME {
     decltype(::glWaitSync)* waitSync = nullptr;
     decltype(::glWeightPathsNV)* weightPathsNV = nullptr;
 
-    MYGL_DISPATCH_NAME(bool read = false);
-    MYGL_DISPATCH_NAME(loader_function loader);
+    MYGL_DISPATCH_NAME()  = default;
 
     MYGL_DISPATCH_NAME(const MYGL_DISPATCH_NAME&) = delete;
     MYGL_DISPATCH_NAME(MYGL_DISPATCH_NAME&&) = default;
