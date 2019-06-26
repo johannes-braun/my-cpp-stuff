@@ -7,9 +7,36 @@
 #include <spdlog/spdlog.h>
 #include <fstream>
 #include <opengl/mygl_glfw.hpp>
+#include <glm/gtx/string_cast.hpp>
+#include <processing/gl_func.hpp>
 
 namespace mpp
 {
+    constexpr auto cube_vs_src = R"(#version 430 core
+vec3 mk_cube(int id)
+{
+    id = 1 << id;
+    return vec3(float((0x287a & id) != 0),
+        float((0x02af & id) != 0),
+        float((0x31e3 & id) != 0));
+}
+
+uniform mat4 mvp;
+
+void main()
+{
+    gl_Position = (mvp * vec4(mk_cube(gl_VertexID), 1.f)).xyzw;
+}
+)";
+
+    constexpr auto cube_fs_src = R"(#version 430 core
+layout(location = 0) out vec4 col;
+void main()
+{
+    col = vec4(1.f, 0.8f, 0.3f, 1.f);
+}
+)";
+
     cameras_impl::cameras_impl() {
         use_environment<opengl_environment>();
     }
@@ -26,6 +53,14 @@ namespace mpp
         _camera.set_rotate_smoothing(0.7f);
         _camera.set_position(glm::vec3(3, 3, 3));
         _camera.look_at(glm::vec3(0, 0, 0));
+
+        glGenVertexArrays(1, &_cube.vao);
+        auto vs = create_shader(GL_VERTEX_SHADER, cube_vs_src);
+        auto fs = create_shader(GL_FRAGMENT_SHADER, cube_fs_src);
+        _cube.program = create_program({ vs, fs });
+        _cube.mvp_location = glGetUniformLocation(_cube.program, "mvp");
+        glDeleteProgram(vs);
+        glDeleteProgram(fs);
     }
     void cameras_impl::on_update(program_state& state, seconds delta) {
 
@@ -59,14 +94,23 @@ namespace mpp
         }
         _last_curpos = { cposx, cposy };
         _camera.update(delta_millis);
-        glClear(GL_COLOR_BUFFER_BIT);
-
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        
         int viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
 
         const glm::mat4 view_proj =
             glm::perspectiveFov(glm::radians(60.f), float(viewport[2]), float(viewport[3]), 0.01f, 100.f) *
             _camera.view_matrix();
+
+        glUseProgram(_cube.program);
+        glBindVertexArray(_cube.vao);
+        for (const auto& i : _hierarchy)
+        {
+            glUniformMatrix4fv(_cube.mvp_location, 1, false, glm::value_ptr(view_proj * i.transformation));
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 14);
+        }
 
         if (ImGui::Begin("Settings"))
         {
@@ -98,6 +142,19 @@ namespace mpp
             if (ImGui::Button("Match", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
             {
                 _photogrammetry.match_all();
+            }
+            if (ImGui::Button("Hierarchy", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
+            {
+                _hierarchy = _photogrammetry.base_processor().build_flat_hierarchy();
+                for (const auto& el : _hierarchy)
+                {
+                    spdlog::info("MoMa: {}", glm::to_string(el.transformation));
+                }
+            }
+            if (ImGui::Button("Clear", ImVec2(ImGui::GetContentRegionAvailWidth(), 0)))
+            {
+                _photogrammetry.clear();
+                _hierarchy.clear();
             }
         }
         ImGui::End();

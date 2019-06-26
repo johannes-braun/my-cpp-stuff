@@ -114,7 +114,7 @@ namespace mpp
         const auto e = essential_matrix(a, b);
         if (!e) return std::nullopt;
 
-        const Eigen::Matrix3f& e_mat = reinterpret_cast<const Eigen::Matrix3f&>(e);
+        Eigen::Matrix3f e_mat = reinterpret_cast<const Eigen::Matrix<float, 3, 3, Eigen::ColMajor>&>(e);
         Eigen::JacobiSVD<Eigen::Matrix3f> svd(e_mat, Eigen::ComputeFullU | Eigen::ComputeFullV);
 
         Eigen::Matrix3f w;
@@ -128,7 +128,7 @@ namespace mpp
             -1, 0, 0,
             0, 0, 0;
 
-        const Eigen::Matrix3f r = svd.matrixU() * w_inv * svd.matrixV();
+        const Eigen::Matrix<float, 3, 3, Eigen::ColMajor> r = svd.matrixU() * w_inv * svd.matrixV();
         const Eigen::Matrix3f tx = svd.matrixU() * z * svd.matrixU().transpose();
 
         glm::mat4 trafo(reinterpret_cast<const glm::mat3&>(r));

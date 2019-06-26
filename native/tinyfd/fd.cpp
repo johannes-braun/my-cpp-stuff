@@ -16,6 +16,9 @@ namespace mpp
     {
         const char* paths = tinyfd_openFileDialog(title.c_str(), default_path.string().c_str(), int(filter_patterns.size()), filter_patterns.data(), description, true);
 
+        if (!paths)
+            return {};
+
         std::vector<std::filesystem::path> ret;
         std::istringstream ss(paths);
         std::string token;

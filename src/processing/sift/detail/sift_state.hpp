@@ -68,13 +68,6 @@ namespace mpp::sift::detail
             uniform_t u_mip_location;
             uniform_t u_border_location;
         } filter;
-
-        struct {
-            std::uint32_t program;
-            uniform_t u_texture_location;
-            uniform_t u_mip_location;
-        } transform_feedback_reduce;
-
         struct {
             std::uint32_t program;
             uniform_t u_textures_locations[16];

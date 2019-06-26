@@ -19,8 +19,6 @@
 namespace mpp::sift {
     namespace
     {
-        constexpr float pi = 3.141592653587f;
-
         struct imgf
         {
             int w, h;
@@ -268,109 +266,6 @@ namespace mpp::sift {
             return tf_buf_offset;
         }
 
-        float gaussian(float sigma, float diff)
-        {
-            const float sqrt_2_pi = 2.50662827463f;
-            float inner = diff / sigma;
-            float nom = exp(-(inner * inner / 2));
-            return nom / (sigma * sqrt_2_pi);
-        }
-        //template<typename Fun>
-        //void compute_orientations(detail::sift_state & state, const detection_settings & settings, const imgf & img, int x, int y, int octave, int scale, Fun && publish_orientation)
-        //{
-        //    const glm::ivec2 px(x >> octave, y >> octave);
-        //    const glm::ivec2 tsize(img.w, img.h);
-        //    constexpr int window_size_half = 5;
-        //    constexpr int window_width = window_size_half + window_size_half + 1;
-
-        //    // Discard features where the window does not fit inside the image.
-        //    if (px.x - window_size_half <= 0 || px.x + window_size_half >= tsize.x - 1 || px.y - window_size_half <= 0 || px.y + window_size_half > tsize.y - 1)
-        //        return;
-
-        //    // Subdivide 360 degrees into 36 bins of 10 degrees.
-        //    // Then compute a gaussian- and magnitude-weighted orientation histogram.
-        //    float mag_max = 0;
-        //    float ang_max = pi / 2.f;
-        //    const auto slices = settings.orientation_slices;
-        //    const auto step = (2 * pi) / slices;
-
-        //    std::vector<glm::vec2> vectors(slices);
-        //    for (int win_y = -window_size_half; win_y <= window_size_half; ++win_y)
-        //    {
-        //        for (int win_x = -window_size_half; win_x <= window_size_half; ++win_x)
-        //        {
-        //            int x = px.x + win_x;
-        //            int y = px.y + win_y;
-        //            float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
-        //            float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
-
-        //            float g = gaussian(1.83f, length(glm::vec2(win_x + 0.5f, win_y + 0.5f)));
-
-        //            const float angle = std::fmodf(std::atan2(ydiff, xdiff) + pi, 2 * pi);
-        //            const glm::vec2 mag(g * xdiff, g * ydiff);
-
-        //            // Put into multiple bins to smooth out the histogram (b-1, b, b+1)
-        //            int bin = (int(angle / step) + slices - 1) % slices;
-        //            vectors[bin] += mag;
-        //            bin = (bin + 1) % slices;
-        //            vectors[bin] += mag;
-        //            bin = (bin + 1) % slices;
-        //            vectors[bin] += mag;
-        //        }
-        //    }
-
-        //    const auto it = std::max_element(vectors.begin(), vectors.end(), [](const glm::vec2 & a, const glm::vec2 & b) {
-        //        return glm::dot(a, a) < glm::dot(b, b);
-        //        });
-
-        //    if (glm::dot(*it, *it) > settings.orientation_magnitude_threshold)
-        //        publish_orientation(std::atan2(it->y, it->x));
-        //}
-
-        //void build_feature_descriptor(detail::sift_state & state, const imgf & img, int octave, int scale, feature & ft)
-        //{
-        //    feature::descriptor_t& dc = ft.descriptor;
-
-        //    // Assume (from previous steps) that the feature must be more than 4 pixels away from the image border.
-        //    using histogram_buckets_t = std::array<std::array<std::array<float, 8>, 4>, 4>; // a 4x4-array of 8-element histograms.
-        //    histogram_buckets_t& bins = reinterpret_cast<histogram_buckets_t&>(dc.histrogram);
-
-        //    const auto px = int(std::round(ft.x)) >> octave;
-        //    const auto py = int(std::round(ft.y)) >> octave;
-
-        //    // iterate over frames.
-        //    for (int fy = -2; fy < 2; ++fy)
-        //    {
-        //        for (int fx = -2; fx < 2; ++fx)
-        //        {
-        //            std::array<float, 8>& bucket = bins[fy + 2][fx + 2];
-        //            const int fdx = fx * 4;
-        //            const int fdy = fy * 4;
-
-        //            // iterate over frame elements
-        //            for (int ex = 0; ex < 4; ++ex)
-        //            {
-        //                for (int ey = 0; ey < 4; ++ey)
-        //                {
-        //                    const int x = px + fdx + ex;
-        //                    const int y = py + fdy + ey;
-        //                    const float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
-        //                    const float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
-        //                    const float mag = std::sqrt(xdiff * xdiff + ydiff * ydiff);
-        //                    const float theta = std::atan2(ydiff, xdiff) + pi; // normalize to [0, 2*PI]
-        //                    float g = gaussian(2.5f,
-        //                        length(glm::vec2(ex - 1.5f, ey - 1.5f)));
-
-        //                    // compute angle difference to dominant orientation. In range rad[0, 2*pi] (deg[0�, 360�])
-        //                    const float angle_diff = std::fmodf((ft.orientation - theta) + 3 * pi, 2 * pi);
-        //                    const int angle_index = int(std::floor((angle_diff / (2 * pi)) * 8));
-        //                    bucket[angle_index] += g * mag;
-        //                }
-        //            }
-        //        }
-        //    }
-        //}
-
         int compute_orientations(detail::sift_state & state, int num_features, int base_width, int base_height) {
 
             glUseProgram(state.orientation.program);
@@ -605,10 +500,11 @@ namespace mpp::sift {
         std::atomic_int count = 0;
 
         for_n(stride, [&](int i) {
+            const int step = (a.size() + stride - 1) / float(stride);
             std::multimap<float, const sift::feature*, std::greater<float>> vec;
-            for (int j = i; j * stride + i < a.size(); ++j)
+            for (int j = i * step; j < (i+1) * step && j < a.size(); j++)
             {
-                auto& fta = a[j * stride + i];
+                auto& fta = a[j];
                 auto& map = amatches[i];
                 vec.clear();
                 for (auto& ftb : b)

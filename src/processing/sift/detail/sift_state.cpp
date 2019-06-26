@@ -4,44 +4,11 @@
 #include <opengl/mygl.hpp>
 #include <string>
 #include <spdlog/spdlog.h>
+#include <processing/gl_func.hpp>
 #include "sift_state.hpp"
 
 namespace mpp::sift::detail
 {
-    std::uint32_t create_shader(GLenum type, const char* src)
-    {
-        std::uint32_t sh = glCreateShader(type);
-        glShaderSource(sh, 1, &src, nullptr);
-        glCompileShader(sh);
-        int log_len;
-        glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &log_len);
-        if (log_len > 3)
-        {
-            std::string info_log(log_len, '\0');
-            glGetShaderInfoLog(sh, log_len, &log_len, info_log.data());
-            spdlog::info("Shader Compilation Output:\n{}", info_log);
-        }
-        return sh;
-    }
-
-    std::uint32_t create_program(std::uint32_t frag, std::uint32_t vert)
-    {
-        std::uint32_t program = glCreateProgram();
-        glAttachShader(program, vert);
-        glAttachShader(program, frag);
-        glLinkProgram(program);
-        int log_len;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-        if (log_len > 3)
-        {
-            std::string info_log(log_len, '\0');
-            glGetProgramInfoLog(program, log_len, &log_len, info_log.data());
-            spdlog::info("Shader Compilation Output:\n{}", info_log);
-        }
-        glDetachShader(program, vert);
-        glDetachShader(program, frag);
-        return program;
-    }
 
     std::vector<std::uint32_t> allocate_textures(size_t count)
     {
@@ -96,7 +63,7 @@ namespace mpp::sift::detail
         // Create Gauss-Blur Program for DoG Pyramid Pre-Filtering
         {
             const auto gauss_fs = create_shader(GL_FRAGMENT_SHADER, shader_source::gauss_blur_frag);
-            gauss_blur.program = create_program(gauss_fs, screen_vert);
+            gauss_blur.program = create_program({ gauss_fs, screen_vert });
             glDeleteShader(gauss_fs);
             gauss_blur.u_mip_location = glGetUniformLocation(gauss_blur.program, "u_mip");
             gauss_blur.u_dir_location = glGetUniformLocation(gauss_blur.program, "u_dir");
@@ -107,7 +74,7 @@ namespace mpp::sift::detail
         // Create Difference Program for DoG Pyramid Generation
         {
             const auto diff_fs = create_shader(GL_FRAGMENT_SHADER, shader_source::difference_frag);
-            difference.program = create_program(diff_fs, screen_vert);
+            difference.program = create_program({ diff_fs, screen_vert });
             glDeleteShader(diff_fs);
             difference.u_current_tex_location = glGetUniformLocation(difference.program, "u_current_tex");
             difference.u_previous_tex_location = glGetUniformLocation(difference.program, "u_previous_tex");
@@ -116,7 +83,7 @@ namespace mpp::sift::detail
         // Create Maximize Program for First Feature Selection
         {
             const auto max_fs = create_shader(GL_FRAGMENT_SHADER, shader_source::maximize_frag);
-            maximize.program = create_program(max_fs, screen_vert);
+            maximize.program = create_program({ max_fs, screen_vert });
             glDeleteShader(max_fs);
             maximize.u_previous_tex_location = glGetUniformLocation(maximize.program, "u_previous_tex");
             maximize.u_current_tex_location = glGetUniformLocation(maximize.program, "u_current_tex");
@@ -245,40 +212,6 @@ namespace mpp::sift::detail
             descriptor.u_textures_locations[14] = glGetUniformLocation(descriptor.program, "u_textures[14]");
             descriptor.u_textures_locations[15] = glGetUniformLocation(descriptor.program, "u_textures[15]");
         }
-
-        // Create transform feedback program for feature count reduction
-        {
-            const auto reduction_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::transform_feedback_reduce_geom);
-            const auto reduction_vs = create_shader(GL_VERTEX_SHADER, shader_source::transform_feedback_reduce_vert);
-            const auto reduction_fs = empty_fs;
-
-            transform_feedback_reduce.program = glCreateProgram();
-
-            constexpr const char* tf_out_names[3]{ "feature_values", "octave", "skip_c" };
-            glTransformFeedbackVaryings(transform_feedback_reduce.program, int(std::size(tf_out_names)), std::data(tf_out_names), GL_INTERLEAVED_ATTRIBS);
-
-            glAttachShader(transform_feedback_reduce.program, reduction_vs);
-            glAttachShader(transform_feedback_reduce.program, reduction_gs);
-            glAttachShader(transform_feedback_reduce.program, reduction_fs);
-            glLinkProgram(transform_feedback_reduce.program);
-            int log_len;
-            glGetProgramiv(transform_feedback_reduce.program, GL_INFO_LOG_LENGTH, &log_len);
-            if (log_len > 3)
-            {
-                std::string info_log(log_len, '\0');
-                glGetProgramInfoLog(transform_feedback_reduce.program, log_len, &log_len, info_log.data());
-                spdlog::info("Shader Compilation Output:\n{}", info_log);
-            }
-            glDetachShader(transform_feedback_reduce.program, reduction_vs);
-            glDetachShader(transform_feedback_reduce.program, reduction_gs);
-            glDetachShader(transform_feedback_reduce.program, reduction_fs);
-
-            glDeleteShader(reduction_gs);
-            glDeleteShader(reduction_vs);
-
-            transform_feedback_reduce.u_mip_location = glGetUniformLocation(transform_feedback_reduce.program, "u_mip");
-            transform_feedback_reduce.u_texture_location = glGetUniformLocation(transform_feedback_reduce.program, "u_texture");
-        }
         glDeleteShader(empty_fs);
         glDeleteShader(screen_vert);
 
@@ -329,6 +262,7 @@ namespace mpp::sift::detail
         glDeleteProgram(difference.program);
         glDeleteProgram(maximize.program);
         glDeleteProgram(filter.program);
-        glDeleteProgram(transform_feedback_reduce.program);
+        glDeleteProgram(orientation.program);
+        glDeleteProgram(descriptor.program);
     }
 }

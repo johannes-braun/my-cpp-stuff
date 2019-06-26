@@ -29,5 +29,13 @@ namespace mpp
         camera _camera;
         int _imgs_to_load = 0;
         std::atomic_int _img_counter = 0;
+
+        struct
+        {
+            std::uint32_t vao;
+            std::uint32_t program;
+            std::int32_t mvp_location;
+        } _cube;
+        std::vector<photogrammetry_processor::transformed_image> _hierarchy;
     };
 }
