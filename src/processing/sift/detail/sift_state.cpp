@@ -78,14 +78,20 @@ namespace mpp::sift::detail
         gaussian_textures = allocate_textures(num_feature_scales + 3);
         difference_of_gaussian_textures = allocate_textures(num_feature_scales + 2);
         feature_textures = allocate_textures(num_feature_scales);
-        orientation_textures = allocate_textures(num_feature_scales);
         // Create Renderbuffers for stencil testing
         feature_stencil_buffers.resize(num_feature_scales * num_octaves);
         glGenRenderbuffers(int(feature_stencil_buffers.size()), feature_stencil_buffers.data());
-        glGenBuffers(1, &transform_feedback_buffer);
+        glGenBuffers(1, &filter_transform_buffer);
+        glGenBuffers(1, &orientation_transform_buffer);
+        glGenBuffers(1, &full_feature_buffer);
 
         // Shared Screen-Filling-Triangle Shader
         const auto screen_vert = create_shader(GL_VERTEX_SHADER, shader_source::screen_vert);
+        const auto empty_fs = create_shader(GL_FRAGMENT_SHADER, "#version 320 es\n"
+            "#if GL_ES\n"
+            "precision highp float;\n"
+            "#endif\n"
+            "void main(){ }");
 
         // Create Gauss-Blur Program for DoG Pyramid Pre-Filtering
         {
@@ -122,9 +128,33 @@ namespace mpp::sift::detail
 
         // Create Filter Program to remove outliers
         {
-            const auto filter_fs = create_shader(GL_FRAGMENT_SHADER, shader_source::filter_frag);
-            filter.program = create_program(filter_fs, screen_vert);
-            glDeleteShader(filter_fs);
+            const auto filter_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::filter_geom);
+            const auto filter_vs = create_shader(GL_VERTEX_SHADER, shader_source::filter_vert);
+
+            filter.program = glCreateProgram();
+
+            constexpr const char* tf_out_names[3]{ "feature", "octave", "pad3" };
+            glTransformFeedbackVaryings(filter.program, int(std::size(tf_out_names)), std::data(tf_out_names), GL_INTERLEAVED_ATTRIBS);
+
+            glAttachShader(filter.program, filter_vs);
+            glAttachShader(filter.program, filter_gs);
+            glAttachShader(filter.program, empty_fs);
+            glLinkProgram(filter.program);
+            int log_len;
+            glGetProgramiv(filter.program, GL_INFO_LOG_LENGTH, &log_len);
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetProgramInfoLog(filter.program, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
+            glDetachShader(filter.program, filter_vs);
+            glDetachShader(filter.program, filter_gs);
+            glDetachShader(filter.program, empty_fs);
+
+            glDeleteShader(filter_vs);
+            glDeleteShader(filter_gs);
+
             filter.u_previous_tex_location = glGetUniformLocation(filter.program, "u_previous_tex");
             filter.u_current_tex_location = glGetUniformLocation(filter.program, "u_current_tex");
             filter.u_next_tex_location = glGetUniformLocation(filter.program, "u_next_tex");
@@ -134,15 +164,93 @@ namespace mpp::sift::detail
             filter.u_border_location = glGetUniformLocation(filter.program, "u_border");
         }
 
+        // Create Orientation Program
+        {
+            const auto orientation_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::orientation_geom);
+            const auto orientation_vs = create_shader(GL_VERTEX_SHADER, shader_source::orientation_vert);
+
+            orientation.program = glCreateProgram();
+
+            constexpr const char* tf_out_names[4] { "feature", "octave", "orientation", "pad2" };
+            glTransformFeedbackVaryings(orientation.program, int(std::size(tf_out_names)), std::data(tf_out_names), GL_INTERLEAVED_ATTRIBS);
+
+            glAttachShader(orientation.program, orientation_vs);
+            glAttachShader(orientation.program, orientation_gs);
+            glAttachShader(orientation.program, empty_fs);
+            glLinkProgram(orientation.program);
+            int log_len;
+            glGetProgramiv(orientation.program, GL_INFO_LOG_LENGTH, &log_len);
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetProgramInfoLog(orientation.program, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
+            glDetachShader(orientation.program, orientation_vs);
+            glDetachShader(orientation.program, orientation_gs);
+            glDetachShader(orientation.program, empty_fs);
+
+            glDeleteShader(orientation_vs);
+            glDeleteShader(orientation_gs);
+
+            orientation.u_textures_locations[0] = glGetUniformLocation(orientation.program, "u_textures[0]");
+            orientation.u_textures_locations[1] = glGetUniformLocation(orientation.program, "u_textures[1]");
+            orientation.u_textures_locations[2] = glGetUniformLocation(orientation.program, "u_textures[2]");
+            orientation.u_textures_locations[3] = glGetUniformLocation(orientation.program, "u_textures[3]");
+            orientation.u_textures_locations[4] = glGetUniformLocation(orientation.program, "u_textures[4]");
+            orientation.u_textures_locations[5] = glGetUniformLocation(orientation.program, "u_textures[5]");
+            orientation.u_textures_locations[6] = glGetUniformLocation(orientation.program, "u_textures[6]");
+            orientation.u_textures_locations[7] = glGetUniformLocation(orientation.program, "u_textures[7]");
+            orientation.u_textures_locations[8] = glGetUniformLocation(orientation.program, "u_textures[8]");
+            orientation.u_textures_locations[9] = glGetUniformLocation(orientation.program, "u_textures[9]");
+            orientation.u_textures_locations[10] = glGetUniformLocation(orientation.program, "u_textures[10]");
+            orientation.u_textures_locations[11] = glGetUniformLocation(orientation.program, "u_textures[11]");
+            orientation.u_textures_locations[12] = glGetUniformLocation(orientation.program, "u_textures[12]");
+            orientation.u_textures_locations[13] = glGetUniformLocation(orientation.program, "u_textures[13]");
+            orientation.u_textures_locations[14] = glGetUniformLocation(orientation.program, "u_textures[14]");
+            orientation.u_textures_locations[15] = glGetUniformLocation(orientation.program, "u_textures[15]");
+        }
+
+        {
+            const auto descriptor_cs = create_shader(GL_COMPUTE_SHADER, shader_source::descriptor_comp);
+            descriptor.program = glCreateProgram();
+            glAttachShader(descriptor.program, descriptor_cs);
+            glLinkProgram(descriptor.program);
+            int log_len;
+            glGetProgramiv(descriptor.program, GL_INFO_LOG_LENGTH, &log_len);
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetProgramInfoLog(descriptor.program, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
+            glDetachShader(descriptor.program, descriptor_cs);
+
+            glDeleteShader(descriptor_cs);
+
+            descriptor.u_textures_locations[0] = glGetUniformLocation(descriptor.program, "u_textures[0]");
+            descriptor.u_textures_locations[1] = glGetUniformLocation(descriptor.program, "u_textures[1]");
+            descriptor.u_textures_locations[2] = glGetUniformLocation(descriptor.program, "u_textures[2]");
+            descriptor.u_textures_locations[3] = glGetUniformLocation(descriptor.program, "u_textures[3]");
+            descriptor.u_textures_locations[4] = glGetUniformLocation(descriptor.program, "u_textures[4]");
+            descriptor.u_textures_locations[5] = glGetUniformLocation(descriptor.program, "u_textures[5]");
+            descriptor.u_textures_locations[6] = glGetUniformLocation(descriptor.program, "u_textures[6]");
+            descriptor.u_textures_locations[7] = glGetUniformLocation(descriptor.program, "u_textures[7]");
+            descriptor.u_textures_locations[8] = glGetUniformLocation(descriptor.program, "u_textures[8]");
+            descriptor.u_textures_locations[9] = glGetUniformLocation(descriptor.program, "u_textures[9]");
+            descriptor.u_textures_locations[10] = glGetUniformLocation(descriptor.program, "u_textures[10]");
+            descriptor.u_textures_locations[11] = glGetUniformLocation(descriptor.program, "u_textures[11]");
+            descriptor.u_textures_locations[12] = glGetUniformLocation(descriptor.program, "u_textures[12]");
+            descriptor.u_textures_locations[13] = glGetUniformLocation(descriptor.program, "u_textures[13]");
+            descriptor.u_textures_locations[14] = glGetUniformLocation(descriptor.program, "u_textures[14]");
+            descriptor.u_textures_locations[15] = glGetUniformLocation(descriptor.program, "u_textures[15]");
+        }
+
         // Create transform feedback program for feature count reduction
         {
             const auto reduction_gs = create_shader(GL_GEOMETRY_SHADER, shader_source::transform_feedback_reduce_geom);
             const auto reduction_vs = create_shader(GL_VERTEX_SHADER, shader_source::transform_feedback_reduce_vert);
-            const auto reduction_fs = create_shader(GL_FRAGMENT_SHADER, "#version 320 es\n"
-                "#if GL_ES\n"
-                "precision highp float;\n"
-                "#endif\n"
-                "void main(){ }");
+            const auto reduction_fs = empty_fs;
 
             transform_feedback_reduce.program = glCreateProgram();
 
@@ -167,11 +275,12 @@ namespace mpp::sift::detail
 
             glDeleteShader(reduction_gs);
             glDeleteShader(reduction_vs);
-            glDeleteShader(reduction_fs);
 
             transform_feedback_reduce.u_mip_location = glGetUniformLocation(transform_feedback_reduce.program, "u_mip");
             transform_feedback_reduce.u_texture_location = glGetUniformLocation(transform_feedback_reduce.program, "u_texture");
         }
+        glDeleteShader(empty_fs);
+        glDeleteShader(screen_vert);
 
         // Create one Framebuffer for each Octave (mip-level)
         framebuffers.resize(num_octaves);
@@ -179,14 +288,20 @@ namespace mpp::sift::detail
 
         // Create an empty vertex array to draw a screen-filling-triangle
         glGenVertexArrays(1, &empty_vao);
+        glGenVertexArrays(1, &orientation_vao);
     }
     void sift_state::resize(int width, int height)
     {
+        if (width == this->width && height == this->height)
+            return;
+
+        this->width = width;
+        this->height = height;
+
         resize_textures(temporary_textures, width, height, GL_R32F, int(num_octaves));
         resize_textures(gaussian_textures, width, height, GL_R32F, int(num_octaves));
         resize_textures(difference_of_gaussian_textures, width, height, GL_R32F, int(num_octaves));
         resize_textures(feature_textures, width, height, GL_RGBA32F, int(num_octaves));
-        resize_textures(orientation_textures, width, height, GL_R32F, int(num_octaves));
 
         for (int oct = 0; oct < num_octaves; ++oct)
         {
@@ -199,8 +314,11 @@ namespace mpp::sift::detail
     }
     sift_state::~sift_state()
     {
-        glDeleteBuffers(1, &transform_feedback_buffer);
+        glDeleteBuffers(1, &filter_transform_buffer);
+        glDeleteBuffers(1, &orientation_transform_buffer);
+        glDeleteBuffers(1, &full_feature_buffer);
         glDeleteVertexArrays(1, &empty_vao);
+        glDeleteVertexArrays(1, &orientation_vao);
         glDeleteFramebuffers(int(framebuffers.size()), framebuffers.data());
         glDeleteTextures(int(temporary_textures.size()), temporary_textures.data());
         glDeleteTextures(int(gaussian_textures.size()), gaussian_textures.data());

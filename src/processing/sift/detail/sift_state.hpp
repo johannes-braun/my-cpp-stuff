@@ -18,16 +18,20 @@ namespace mpp::sift::detail
         sift_state& operator=(const sift_state&) = delete;
         sift_state& operator=(sift_state&&) = delete;
 
+        int width = -1;
+        int height = -1;
         size_t num_octaves;
         size_t num_feature_scales;
         std::vector<std::uint32_t> temporary_textures;
         std::vector<std::uint32_t> gaussian_textures;
         std::vector<std::uint32_t> difference_of_gaussian_textures;
         std::vector<std::uint32_t> feature_textures;
-        std::vector<std::uint32_t> orientation_textures;
         std::vector<std::uint32_t> feature_stencil_buffers;
         std::vector<std::uint32_t> framebuffers;
-        std::uint32_t transform_feedback_buffer;
+        std::uint32_t filter_transform_buffer;
+        std::uint32_t orientation_transform_buffer;
+        std::uint32_t full_feature_buffer;
+        std::uint32_t orientation_vao;
         std::uint32_t empty_vao;
 
         struct {
@@ -70,5 +74,14 @@ namespace mpp::sift::detail
             uniform_t u_texture_location;
             uniform_t u_mip_location;
         } transform_feedback_reduce;
+
+        struct {
+            std::uint32_t program;
+            uniform_t u_textures_locations[16];
+        } orientation;
+        struct {
+            std::uint32_t program;
+            uniform_t u_textures_locations[16];
+        } descriptor;
     };
 }

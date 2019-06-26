@@ -121,7 +121,7 @@ namespace mpp::sift {
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
 
-        void apply_gaussian(detail::sift_state& state)
+        void apply_gaussian(detail::sift_state & state)
         {
             glUseProgram(state.gauss_blur.program);
             glUniform1i(state.gauss_blur.in_texture_location, 0);
@@ -153,7 +153,7 @@ namespace mpp::sift {
             glScissor(x, y, w, h);
         }
 
-        void generate_difference_of_gaussian(detail::sift_state& state)
+        void generate_difference_of_gaussian(detail::sift_state & state)
         {
             glUseProgram(state.difference.program);
             glUniform1i(state.difference.u_current_tex_location, 0);
@@ -173,7 +173,7 @@ namespace mpp::sift {
             }
         }
 
-        void detect_candidates(detail::sift_state& state, int base_width, int base_height)
+        void detect_candidates(detail::sift_state & state, int base_width, int base_height)
         {
             glUseProgram(state.maximize.program);
             glUniform1i(state.maximize.u_previous_tex_location, 0);
@@ -181,12 +181,6 @@ namespace mpp::sift {
             glUniform1i(state.maximize.u_next_tex_location, 2);
 
             glClearColor(0, 0, 0, 1);
-            glClearStencil(0x0);
-            glEnable(GL_STENCIL_TEST);
-            glStencilFunc(GL_ALWAYS, 1, 0xff);
-            glStencilOp(GL_ZERO, GL_REPLACE, GL_REPLACE);
-            glStencilMask(0xff);
-
             for (int o = 0; o < state.num_octaves; ++o)
             {
                 glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[o]);
@@ -194,12 +188,7 @@ namespace mpp::sift {
                 for (size_t feature_scale = 0; feature_scale < state.feature_textures.size(); ++feature_scale)
                 {
                     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state.feature_textures[feature_scale], o);
-                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, state.feature_stencil_buffers[feature_scale + o * state.num_feature_scales]);
-
-                    const auto status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-
-                    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
+                    glClear(GL_COLOR_BUFFER_BIT);
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[std::int64_t(feature_scale)]);
                     glActiveTexture(GL_TEXTURE1);
@@ -214,12 +203,16 @@ namespace mpp::sift {
             }
         }
 
-        void filter_features(detail::sift_state& state, int base_width, int base_height)
+        struct tf_feature
         {
-            glStencilFunc(GL_EQUAL, 1, 0xff);
-            glStencilOp(GL_ZERO, GL_REPLACE, GL_REPLACE);
-            glStencilMask(0xff);
+            glm::vec4 feat;
+            std::int32_t octave;
+            float orientation;
+            std::int32_t _pad[2];
+        };
 
+        int filter_features(detail::sift_state & state, int base_width, int base_height, int samples_passed)
+        {
             glUseProgram(state.filter.program);
             glUniform1i(state.filter.u_previous_tex_location, 0);
             glUniform1i(state.filter.u_current_tex_location, 1);
@@ -227,6 +220,16 @@ namespace mpp::sift {
             glUniform1i(state.filter.u_feature_tex_location, 3);
             // leave out border of a couple of pixels
             glUniform1i(state.filter.u_border_location, 8);
+            glEnable(GL_RASTERIZER_DISCARD);
+            std::int64_t tf_buf_offset = 0;
+            std::uint32_t tf_query;
+            glGenQueries(1, &tf_query);
+            glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, state.filter_transform_buffer);
+            int buffer_size;
+            glGetBufferParameteriv(GL_TRANSFORM_FEEDBACK_BUFFER, GL_BUFFER_SIZE, &buffer_size);
+            if (buffer_size < samples_passed * sizeof(tf_feature))
+                glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, samples_passed * sizeof(tf_feature), nullptr, GL_DYNAMIC_COPY);
+
             for (int mip = 0; mip < state.num_octaves; ++mip)
             {
                 glUniform1i(state.filter.u_mip_location, mip);
@@ -234,13 +237,13 @@ namespace mpp::sift {
                 {
                     glUniform1i(state.filter.u_scale_location, scale);
                     // Bind previous, current and next scale DoG image
-                    // set current feature image mip as stencil buffer
                     // update sigma uniform
                     // compute stuff
                     glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[mip]);
                     apply_viewport(0, 0, base_width >> mip, base_height >> mip);
                     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, state.feature_textures[scale], mip);
-                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, state.feature_stencil_buffers[scale + mip * state.num_feature_scales]);
+                    glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, state.filter_transform_buffer,
+                        tf_buf_offset * sizeof(tf_feature), (samples_passed - tf_buf_offset) * sizeof(tf_feature));
 
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[std::int64_t(scale) + 0]);
@@ -250,9 +253,19 @@ namespace mpp::sift {
                     glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[std::int64_t(scale) + 2]);
                     glActiveTexture(GL_TEXTURE3);
                     glBindTexture(GL_TEXTURE_2D, state.feature_textures[scale]);
-                    dispatch();
+
+                    glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, tf_query);
+                    glBeginTransformFeedback(GL_POINTS);
+                    glDrawArrays(GL_POINTS, 0, (base_width >> mip) * (base_height >> mip));
+                    glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+                    glEndTransformFeedback();
+                    std::uint32_t prims_written = 0;
+                    glGetQueryObjectuiv(tf_query, GL_QUERY_RESULT, &prims_written);
+                    tf_buf_offset += std::int64_t(prims_written);
                 }
             }
+            glDisable(GL_RASTERIZER_DISCARD);
+            return tf_buf_offset;
         }
 
         float gaussian(float sigma, float diff)
@@ -262,112 +275,166 @@ namespace mpp::sift {
             float nom = exp(-(inner * inner / 2));
             return nom / (sigma * sqrt_2_pi);
         }
-        template<typename Fun>
-        void compute_orientations(detail::sift_state& state, const detection_settings& settings, const imgf& img, int x, int y, int octave, int scale, Fun&& publish_orientation)
-        {
-            const glm::ivec2 px(x >> octave, y >> octave);
-            const glm::ivec2 tsize(img.w, img.h);
-            constexpr int window_size_half = 4;
-            constexpr int window_width = window_size_half + window_size_half + 1;
+        //template<typename Fun>
+        //void compute_orientations(detail::sift_state & state, const detection_settings & settings, const imgf & img, int x, int y, int octave, int scale, Fun && publish_orientation)
+        //{
+        //    const glm::ivec2 px(x >> octave, y >> octave);
+        //    const glm::ivec2 tsize(img.w, img.h);
+        //    constexpr int window_size_half = 5;
+        //    constexpr int window_width = window_size_half + window_size_half + 1;
 
-            // Discard features where the window does not fit inside the image.
-            if (px.x - window_size_half <= 0 || px.x + window_size_half >= tsize.x - 1 || px.y - window_size_half <= 0 || px.y + window_size_half > tsize.y - 1)
-                return;
+        //    // Discard features where the window does not fit inside the image.
+        //    if (px.x - window_size_half <= 0 || px.x + window_size_half >= tsize.x - 1 || px.y - window_size_half <= 0 || px.y + window_size_half > tsize.y - 1)
+        //        return;
 
-            // Subdivide 360 degrees into 36 bins of 10 degrees.
-            // Then compute a gaussian- and magnitude-weighted orientation histogram.
-            std::vector<float> angles;
-            std::vector<glm::vec2> vectors;
-            angles.reserve(window_width * window_width);
-            vectors.reserve(window_width * window_width);
-            for (int win_y = -window_size_half; win_y <= window_size_half; ++win_y)
+        //    // Subdivide 360 degrees into 36 bins of 10 degrees.
+        //    // Then compute a gaussian- and magnitude-weighted orientation histogram.
+        //    float mag_max = 0;
+        //    float ang_max = pi / 2.f;
+        //    const auto slices = settings.orientation_slices;
+        //    const auto step = (2 * pi) / slices;
+
+        //    std::vector<glm::vec2> vectors(slices);
+        //    for (int win_y = -window_size_half; win_y <= window_size_half; ++win_y)
+        //    {
+        //        for (int win_x = -window_size_half; win_x <= window_size_half; ++win_x)
+        //        {
+        //            int x = px.x + win_x;
+        //            int y = px.y + win_y;
+        //            float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
+        //            float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
+
+        //            float g = gaussian(1.83f, length(glm::vec2(win_x + 0.5f, win_y + 0.5f)));
+
+        //            const float angle = std::fmodf(std::atan2(ydiff, xdiff) + pi, 2 * pi);
+        //            const glm::vec2 mag(g * xdiff, g * ydiff);
+
+        //            // Put into multiple bins to smooth out the histogram (b-1, b, b+1)
+        //            int bin = (int(angle / step) + slices - 1) % slices;
+        //            vectors[bin] += mag;
+        //            bin = (bin + 1) % slices;
+        //            vectors[bin] += mag;
+        //            bin = (bin + 1) % slices;
+        //            vectors[bin] += mag;
+        //        }
+        //    }
+
+        //    const auto it = std::max_element(vectors.begin(), vectors.end(), [](const glm::vec2 & a, const glm::vec2 & b) {
+        //        return glm::dot(a, a) < glm::dot(b, b);
+        //        });
+
+        //    if (glm::dot(*it, *it) > settings.orientation_magnitude_threshold)
+        //        publish_orientation(std::atan2(it->y, it->x));
+        //}
+
+        //void build_feature_descriptor(detail::sift_state & state, const imgf & img, int octave, int scale, feature & ft)
+        //{
+        //    feature::descriptor_t& dc = ft.descriptor;
+
+        //    // Assume (from previous steps) that the feature must be more than 4 pixels away from the image border.
+        //    using histogram_buckets_t = std::array<std::array<std::array<float, 8>, 4>, 4>; // a 4x4-array of 8-element histograms.
+        //    histogram_buckets_t& bins = reinterpret_cast<histogram_buckets_t&>(dc.histrogram);
+
+        //    const auto px = int(std::round(ft.x)) >> octave;
+        //    const auto py = int(std::round(ft.y)) >> octave;
+
+        //    // iterate over frames.
+        //    for (int fy = -2; fy < 2; ++fy)
+        //    {
+        //        for (int fx = -2; fx < 2; ++fx)
+        //        {
+        //            std::array<float, 8>& bucket = bins[fy + 2][fx + 2];
+        //            const int fdx = fx * 4;
+        //            const int fdy = fy * 4;
+
+        //            // iterate over frame elements
+        //            for (int ex = 0; ex < 4; ++ex)
+        //            {
+        //                for (int ey = 0; ey < 4; ++ey)
+        //                {
+        //                    const int x = px + fdx + ex;
+        //                    const int y = py + fdy + ey;
+        //                    const float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
+        //                    const float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
+        //                    const float mag = std::sqrt(xdiff * xdiff + ydiff * ydiff);
+        //                    const float theta = std::atan2(ydiff, xdiff) + pi; // normalize to [0, 2*PI]
+        //                    float g = gaussian(2.5f,
+        //                        length(glm::vec2(ex - 1.5f, ey - 1.5f)));
+
+        //                    // compute angle difference to dominant orientation. In range rad[0, 2*pi] (deg[0�, 360�])
+        //                    const float angle_diff = std::fmodf((ft.orientation - theta) + 3 * pi, 2 * pi);
+        //                    const int angle_index = int(std::floor((angle_diff / (2 * pi)) * 8));
+        //                    bucket[angle_index] += g * mag;
+        //                }
+        //            }
+        //        }
+        //    }
+        //}
+
+        int compute_orientations(detail::sift_state & state, int num_features, int base_width, int base_height) {
+
+            glUseProgram(state.orientation.program);
+            for (int i = 0; i < state.difference_of_gaussian_textures.size(); ++i)
             {
-                for (int win_x = -window_size_half; win_x <= window_size_half; ++win_x)
-                {
-                    int x = px.x + win_x;
-                    int y = px.y + win_y;
-                    float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
-                    float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
-                    float mag = std::sqrt(xdiff * xdiff + ydiff * ydiff);
-
-                    float g = gaussian(2.5f, length(glm::vec2(win_x + 0.5f, win_y + 0.5f)));
-                    angles.emplace_back(std::atan2(ydiff, xdiff));
-                    vectors.emplace_back(g * xdiff, g * ydiff);
-                }
+                glUniform1i(state.orientation.u_textures_locations[i], i);
+                glActiveTexture(GLenum(int(GL_TEXTURE0) + i));
+                glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[i]);
             }
 
-            float mag_max = 0;
-            float ang_max = pi / 2.f;
-            const auto slices = settings.orientation_slices;
-            const auto step = (2 * pi) / slices;
-            for (int angle = 0; angle < slices; ++angle)
-            {
-                const float min_angle = step * angle - pi;
-                const float max_angle = min_angle + pi / 3.f;
+            glEnable(GL_RASTERIZER_DISCARD);
+            std::uint32_t tf_query;
+            glGenQueries(1, &tf_query);
+            int filter_buffer_size = num_features * sizeof(tf_feature);
+            int orientation_buffer_size = 0;
+            glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, state.orientation_transform_buffer);
+            glGetBufferParameteriv(GL_TRANSFORM_FEEDBACK_BUFFER, GL_BUFFER_SIZE, &orientation_buffer_size);
+            if (filter_buffer_size > orientation_buffer_size)
+                glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, filter_buffer_size, nullptr, GL_DYNAMIC_COPY);
 
-                glm::vec2 sum(0, 0);
-                for (size_t i = 0; i < angles.size(); ++i)
-                {
-                    const auto ang_mod = std::fmodf(angles[i] + 2 * pi, 2 * pi);
-                    if (ang_mod >= min_angle && ang_mod <= max_angle)
-                    {
-                        sum += vectors[i];
-                    }
-                }
+            glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[0]);
+            apply_viewport(0, 0, base_width, base_height);
+            glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, state.feature_textures[0], 0);
+            glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, state.orientation_transform_buffer,
+                0, filter_buffer_size);
 
-                const auto length2 = dot(sum, sum);
-                if (length2 > mag_max)
-                {
-                    mag_max = length2;
-                    ang_max = std::atan2(sum.y, sum.x);
-                }
-            }
-            if (mag_max > settings.orientation_magnitude_threshold)
-                publish_orientation(ang_max);
+            glBindVertexArray(state.orientation_vao);
+            glEnableVertexAttribArray(0);
+            glEnableVertexAttribArray(1);
+            glBindBuffer(GL_ARRAY_BUFFER, state.filter_transform_buffer);
+            glVertexAttribPointer(0, 4, GL_FLOAT, false, sizeof(tf_feature), (const void*)offsetof(tf_feature, feat));
+            glVertexAttribPointer(1, 1, GL_INT, false, sizeof(tf_feature), (const void*)offsetof(tf_feature, octave));
+
+            glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, tf_query);
+            glBeginTransformFeedback(GL_POINTS);
+            glDrawArrays(GL_POINTS, 0, num_features);
+            glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+            glEndTransformFeedback();
+            std::uint32_t prims_written = 0;
+            glGetQueryObjectuiv(tf_query, GL_QUERY_RESULT, &prims_written);
+            std::int64_t tf_buf_offset = std::int64_t(prims_written);
+            glBindVertexArray(0);
+            glDisable(GL_RASTERIZER_DISCARD);
+            return tf_buf_offset;
         }
 
-        void build_feature_descriptor(detail::sift_state& state, const imgf& img, int octave, int scale, feature& ft)
+        void compute_descriptors(detail::sift_state& state, int num_features)
         {
-            feature::descriptor_t& dc = ft.descriptor;
+            glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 0, state.orientation_transform_buffer, 0, num_features * sizeof(tf_feature));
+            int full_buffer_size = 0;
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, state.full_feature_buffer);
+            glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE, &full_buffer_size);
+            if (full_buffer_size < num_features * sizeof(feature))
+                glBufferData(GL_SHADER_STORAGE_BUFFER, num_features * sizeof(feature), nullptr, GL_DYNAMIC_COPY);
+            glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 1, state.full_feature_buffer, 0, num_features * sizeof(feature));
+            glUseProgram(state.descriptor.program);
 
-            // Assume (from previous steps) that the feature must be more than 4 pixels away from the image border.
-            using histogram_buckets_t = std::array<std::array<std::array<float, 8>, 4>, 4>; // a 4x4-array of 8-element histograms.
-            histogram_buckets_t& bins = reinterpret_cast<histogram_buckets_t&>(dc.histrogram);
-
-            const auto px = int(std::round(ft.x)) >> octave;
-            const auto py = int(std::round(ft.y)) >> octave;
-
-            // iterate over frames.
-            for (int fy = -2; fy < 2; ++fy)
+            for (int i = 0; i < state.difference_of_gaussian_textures.size(); ++i)
             {
-                for (int fx = -2; fx < 2; ++fx)
-                {
-                    std::array<float, 8> & bucket = bins[fy + 2][fx + 2];
-                    const int fdx = fx * 4;
-                    const int fdy = fy * 4;
-
-                    // iterate over frame elements
-                    for (int ex = 0; ex < 4; ++ex)
-                    {
-                        for (int ey = 0; ey < 4; ++ey)
-                        {
-                            const int x = px + fdx + ex;
-                            const int y = py + fdy + ey;
-                            const float xdiff = img.read(x + 1, y).r - img.read(x - 1, y).r;
-                            const float ydiff = img.read(x, y + 1).r - img.read(x, y - 1).r;
-                            const float mag = std::sqrt(xdiff * xdiff + ydiff * ydiff);
-                            const float theta = std::atan2(ydiff, xdiff) + pi; // normalize to [0, 2*PI]
-                            float g = gaussian(2.5f,
-                                length(glm::vec2(ex - 1.5f, ey - 1.5f)));
-
-                            // compute angle difference to dominant orientation. In range rad[0, 2*pi] (deg[0�, 360�])
-                            const float angle_diff = std::fmodf((ft.orientation - theta) + 3 * pi, 2 * pi);
-                            const int angle_index = int(std::floor((angle_diff / (2 * pi)) * 8));
-                            bucket[angle_index] += g * mag;
-                        }
-                    }
-                }
+                glUniform1i(state.descriptor.u_textures_locations[i], i);
+                glActiveTexture(GLenum(int(GL_TEXTURE0) + i));
+                glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[i]);
             }
+            glDispatchCompute((num_features + 31) / 32, 1, 1);
         }
     }
 
@@ -381,38 +448,23 @@ namespace mpp::sift {
         return std::make_shared<sift_cache>(num_octaves, num_feature_scales);
     }
 
-    std::vector<feature> detect_features(const image& img, const detection_settings& settings, dst_system system)
+    std::vector<feature> detect_features(const image & img, const detection_settings & settings, dst_system system)
     {
         auto in_state = create_cache(settings.octaves, settings.feature_scales);
         return detect_features(*in_state, img, settings, system);
     }
 
-    void rd_tex(std::uint32_t t, int l, GLenum fmt, GLenum ty, void* d)
+    std::vector<feature> detect_features(sift_cache & cache, const image & img, const detection_settings & settings, dst_system system)
     {
-        int f;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &f);
-        std::uint32_t fbo;
-        glGenFramebuffers(1, &fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glBindTexture(GL_TEXTURE_2D, t);
-        int w, h;
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, l, GL_TEXTURE_WIDTH, &w);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, l, GL_TEXTURE_HEIGHT, &h);
-
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, l);
-        glReadPixels(0, 0, w, h, fmt, ty, d);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, f);
-        glDeleteFramebuffers(1, &fbo);
-    }
-
-    std::vector<feature> detect_features(sift_cache& cache, const image& img, const detection_settings& settings, dst_system system)
-    {
+        using clock_type =
 #if defined(__ANDROID__)
-        basic_perf_log<std::chrono::microseconds, std::chrono::system_clock> plog("SIFT");
+            std::chrono::system_clock;
 #else
-        basic_perf_log<std::chrono::microseconds, gl_query_clock> plog("SIFT");
+            gl_query_clock;
 #endif
+
+        basic_perf_log<std::chrono::microseconds, clock_type> plog("SIFT");
+
         plog.start();
         // Before starting, capture the OpenGL state for a seamless interaction
         opengl_state_capture capture_state;
@@ -488,123 +540,24 @@ namespace mpp::sift {
 #endif
 
         // STEP 4: Filter features to exclude outliers and to improve accuracy
-        filter_features(state, base_width, base_height);
+        int num_features = filter_features(state, base_width, base_height, samples_passed);
         plog.step("Filter features to exclude outliers and to improve accuracy");
 
-        std::uint32_t fbo;
-        glGenFramebuffers(1, &fbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        // Download texture data for further processing on the CPU
-        std::vector<imgf> gaussians(settings.octaves * state.difference_of_gaussian_textures.size());
-        for (int scale = 0; scale < state.difference_of_gaussian_textures.size(); ++scale)
-        {
-            for (int octave = 0; octave < settings.octaves; ++octave)
-            {
-                glBindTexture(GL_TEXTURE_2D, state.difference_of_gaussian_textures[scale]);
-                gaussians[octave * state.difference_of_gaussian_textures.size() + scale].w = base_width >> octave;
-                gaussians[octave * state.difference_of_gaussian_textures.size() + scale].h = base_height >> octave;
-                gaussians[octave * state.difference_of_gaussian_textures.size() + scale].values.resize((base_width >> octave) * (base_height >> octave));
-                int w, h;
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, octave, GL_TEXTURE_WIDTH, &w);
-                glGetTexLevelParameteriv(GL_TEXTURE_2D, octave, GL_TEXTURE_HEIGHT, &h);
+        num_features = compute_orientations(state, num_features, base_width, base_height);
+        plog.step("Orientation Computation");
 
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state.difference_of_gaussian_textures[scale], 0);
-                glReadPixels(0, 0, base_width >> octave, base_height >> octave, GL_RED, GL_FLOAT, gaussians[octave * state.difference_of_gaussian_textures.size() + scale].values.data());
-            }
-        }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteFramebuffers(1, &fbo);
-        plog.step("Download difference-of-gaussian texture data for further processing on the CPU");
+        compute_descriptors(state, num_features);
+        plog.step("Descriptor Computation");
 
-        struct tf_feature
-        {
-            glm::vec4 feat;
-            std::int32_t octave;
-            std::int32_t _pad[3];
-        };
-        glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, state.transform_feedback_buffer);
-        int buffer_size;
-        glGetBufferParameteriv(GL_TRANSFORM_FEEDBACK_BUFFER, GL_BUFFER_SIZE, &buffer_size);
-        if (buffer_size < samples_passed * sizeof(tf_feature))
-            glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, samples_passed * sizeof(tf_feature), nullptr, GL_DYNAMIC_COPY);
-
-        glUseProgram(state.transform_feedback_reduce.program);
-        glUniform1i(state.transform_feedback_reduce.u_texture_location, 0);
-        glActiveTexture(GL_TEXTURE0);
-        std::int64_t tf_buf_offset = 0;
-        std::uint32_t tf_query;
-        glGenQueries(1, &tf_query);
-        glEnable(GL_RASTERIZER_DISCARD);
-        for (int octave = 0; octave < settings.octaves; ++octave)
-        {
-            glBindFramebuffer(GL_FRAMEBUFFER, state.framebuffers[octave]);
-            glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 0, 0);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
-            glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH, base_width >> octave);
-            glFramebufferParameteri(GL_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT, base_height >> octave);
-
-            glUniform1i(state.transform_feedback_reduce.u_mip_location, octave);
-
-            for (int scale = 0; scale < state.feature_textures.size(); ++scale)
-            {
-                glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, state.transform_feedback_buffer,
-                    tf_buf_offset * sizeof(tf_feature), (samples_passed - tf_buf_offset) * sizeof(tf_feature));
-                glBindTexture(GL_TEXTURE_2D, state.feature_textures[scale]);
-
-                glBindVertexArray(state.empty_vao);
-                glBeginQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, tf_query);
-                glBeginTransformFeedback(GL_POINTS);
-                glDrawArrays(GL_POINTS, 0, (base_width >> octave) * (base_height >> octave));
-                glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
-                glEndTransformFeedback();
-                std::uint32_t prims_written = 0;
-                glGetQueryObjectuiv(tf_query, GL_QUERY_RESULT, &prims_written);
-                tf_buf_offset += std::int64_t(prims_written);
-            }
-        }
-        glDeleteQueries(1, &tf_query);
-        glDisable(GL_RASTERIZER_DISCARD);
-        auto d = static_cast<const tf_feature*>(glMapBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, tf_buf_offset * sizeof(tf_feature), GL_MAP_READ_BIT));
-        std::vector<tf_feature> tf_data(d, d + tf_buf_offset);
-        glUnmapBuffer(GL_TRANSFORM_FEEDBACK_BUFFER);
-        plog.step("Transform feedback feature reduction");
-
-        // STEP 5: Compute main orientations at the feature points
-        // +
-        // STEP 6: Build feature descriptors
-        constexpr auto stride = 16;
-        std::array<std::vector<feature>, stride> future_vectors;
-        for_n(stride, [&](int i) {
-            auto& fvec = future_vectors[i];
-            fvec.reserve(tf_data.size() / stride + 1);
-            for (int j = 0; j * stride + i < tf_data.size(); ++j)
-            {
-                const auto& tfeat = tf_data[j * stride + i];
-                // Conditional. Calls the lambda only if orientation magnitude is greater than the threshold.
-                const auto& iimg = gaussians[tfeat.octave * state.difference_of_gaussian_textures.size() + int(round(tfeat.feat.z))];
-                compute_orientations(state, settings, iimg, int(round(tfeat.feat.x)), int(round(tfeat.feat.y)), tfeat.octave, int(round(tfeat.feat.z)), [&](float orientation) {
-                    fvec.emplace_back(feature{ float(tfeat.feat.x), float(tfeat.feat.y), float(tfeat.feat.z), float(tfeat.feat.w), orientation, tfeat.octave });
-                    });
-            }
-            });
-        plog.step("Compute principal feature orientations");
-
-        for_n(stride, [&](int i) {
-            auto& fvec = future_vectors[i];
-            for (auto& ft : fvec)
-                build_feature_descriptor(state, gaussians[ft.octave * settings.feature_scales + size_t(std::round(ft.sigma))], ft.octave, size_t(std::round(ft.sigma)), ft);
-            });
-        plog.step("Build descriptors");
-
-        // Merge multithreaded results
-        std::vector<feature> all_feature_points;
-        for (const auto& x : future_vectors)
-            all_feature_points.insert(all_feature_points.end(), x.begin(), x.end());
-        plog.step("Merge multithreaded results");
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, state.full_feature_buffer);
+        auto d = static_cast<const feature*>(glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, num_features * sizeof(feature), GL_MAP_READ_BIT));
+        std::vector<feature> tf_data(d, d + num_features);
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        plog.step("Descriptor Download");
 
         if (system == dst_system::normalized_coordinates)
         {
-            std::for_each(all_feature_points.begin(), all_feature_points.end(), [&](feature& feat) {
+            std::for_each(tf_data.begin(), tf_data.end(), [&](feature & feat) {
                 feat.x = (2.f * feat.x / img.dimensions().x) - 1.f;
                 feat.y = -((2.f * feat.y / img.dimensions().y) - 1.f);
                 });
@@ -612,13 +565,13 @@ namespace mpp::sift {
         }
         else if (system == dst_system::image_coordinates)
         {
-            std::for_each(all_feature_points.begin(), all_feature_points.end(), [&](feature& feat) {
+            std::for_each(tf_data.begin(), tf_data.end(), [&](feature & feat) {
                 feat.x = feat.x / img.dimensions().x;
                 feat.y = feat.y / img.dimensions().y;
                 });
             plog.step("Convert to image coordinates");
         }
-        return all_feature_points;
+        return tf_data;
     }
 
     float cosine_similarity(const float* a, const float* b, unsigned int size)
@@ -634,12 +587,12 @@ namespace mpp::sift {
         return dot / (sqrt(denom_a) * sqrt(denom_b));
     }
 
-    std::vector<match> match_features(const std::vector<feature>& a, const std::vector<feature>& b, const match_settings& settings)
+    std::vector<match> match_features(const std::vector<feature> & a, const std::vector<feature> & b, const match_settings & settings)
     {
         perf_log plog("SIFT Match");
         plog.start();
         constexpr auto stride = 16;
-        std::array<std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>>, stride> amatches;
+        std::array<std::multimap<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>>, stride> amatches;
 
         struct distance_compute
         {
@@ -652,7 +605,7 @@ namespace mpp::sift {
         std::atomic_int count = 0;
 
         for_n(stride, [&](int i) {
-            std::map<float, const sift::feature*, std::greater<float>> vec;
+            std::multimap<float, const sift::feature*, std::greater<float>> vec;
             for (int j = i; j * stride + i < a.size(); ++j)
             {
                 auto& fta = a[j * stride + i];
@@ -676,7 +629,7 @@ namespace mpp::sift {
             });
         plog.step("Compute matches by finding each features nearest neighbour");
 
-        std::map<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>> best_matches;
+        std::multimap<float, std::pair<const sift::feature*, const sift::feature*>, std::greater<float>> best_matches;
         for (auto const& map : amatches)
         {
             for (const auto& item : map)
@@ -695,7 +648,7 @@ namespace mpp::sift {
 
         return features;
     }
-    std::vector<std::pair<glm::vec2, glm::vec2>> corresponding_points(const std::vector<match>& matches)
+    std::vector<std::pair<glm::vec2, glm::vec2>> corresponding_points(const std::vector<match> & matches)
     {
         std::vector<std::pair<glm::vec2, glm::vec2>> pt(matches.size());
         size_t i = 0;

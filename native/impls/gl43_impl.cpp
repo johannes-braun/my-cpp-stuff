@@ -22,6 +22,14 @@ namespace mpp
             std::uint32_t sh = glCreateShader(type);
             glShaderSource(sh, 1, &src, nullptr);
             glCompileShader(sh);
+            int log_len;
+            glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &log_len);
+            if (log_len > 3)
+            {
+                std::string info_log(log_len, '\0');
+                glGetShaderInfoLog(sh, log_len, &log_len, info_log.data());
+                spdlog::info("Shader Compilation Output:\n{}", info_log);
+            }
             return sh;
         }
 
@@ -141,7 +149,8 @@ void main()
         add_img("../../res/IMG_20190605_174705.jpg");
 #elif 1
         add_img("../../res/IMG_20190616_140852.jpg");
-        add_img("../../res/IMG_20190616_140855.jpg");
+        add_img("../../res/IMG_20190616_140852.jpg");
+        //add_img("../../res/IMG_20190616_140855.jpg");
 #elif 1
         add_img("../../res/IMG_20190614_113934.jpg");
         add_img("../../res/IMG_20190614_113954.jpg");
@@ -149,33 +158,9 @@ void main()
         add_img("../../res/mango/m1.jpg");
         add_img("../../res/mango/m3.jpg");
 #endif
-
-        std::shared_ptr<image> imga = std::make_shared<image>();
-        std::ifstream file("../../res/IMG_20190616_140852.jpg", std::ios::binary | std::ios::in);
-        imga->load_stream(file, 1);
-        std::shared_ptr<image> imgb = std::make_shared<image>();
-        file = std::ifstream("../../res/IMG_20190616_140855.jpg", std::ios::binary | std::ios::in);
-        imgb->load_stream(file, 1);
-        std::shared_ptr<image> imgc = std::make_shared<image>();
-        file = std::ifstream("../../res/IMG_20190616_140857.jpg", std::ios::binary | std::ios::in);
-        imgc->load_stream(file, 1);
-
-        photogrammetry_processor pp;
-        pp.add_image(imgc, 0.028f);
-        pp.add_image(imgb, 0.028f);
-        pp.add_image(imga, 0.028f);
-        pp.match_all();
-        const auto fh = pp.build_flat_hierarchy();
-
-        spdlog::info("Img 1 -> Img 2: {}", glm::to_string(*pp.relative_matrix(imga, imgb)));
-
-        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgb)));
-        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imga, imgc)));
-        spdlog::info("Fundamental matrix: {}", glm::to_string(*pp.fundamental_matrix(imgb, imgc)));
-
         sift::match_settings settings;
         settings.relation_threshold = 0.8f;
-        settings.similarity_threshold = 0.83f;
+        settings.similarity_threshold = 0.7f;
         settings.max_match_count = 50;
         auto matches12 = sift::match_features(features[0], features[1], settings);
         auto pts = sift::corresponding_points(matches12);

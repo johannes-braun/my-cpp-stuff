@@ -15,14 +15,14 @@ namespace mpp::sift
     {
         size_t octaves = 3;
         size_t feature_scales = 3;
-        int orientation_slices = 36;
+        int orientation_slices = 16;
         float orientation_magnitude_threshold = 0.0002f;
     };
 
     struct match_settings
     {
         float relation_threshold = 0.8f;
-        float similarity_threshold = 0.9f; // > 90% matches
+        float similarity_threshold = 0.83f; // > 88% matches
         int max_match_count = std::numeric_limits<int>::max();
     };
 
@@ -39,8 +39,11 @@ namespace mpp::sift
         float y;
         float sigma;
         float scale;
-        float orientation; // angle in radians
+
         int octave;
+        float orientation; // angle in radians
+        float _pad[2];
+
         struct descriptor_t
         {
             std::array<float, 128> histrogram{ 0 };
